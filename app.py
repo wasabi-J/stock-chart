@@ -19,9 +19,16 @@ period = st.selectbox("期間", ["3mo", "6mo", "1y", "2y", "5y"], index=2)
 
 @st.cache_data(ttl=3600)
 def load_data(ticker, period):
-    df = yf.download(ticker, period=period, auto_adjust=True)
+    df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+    if df.empty:
+        return None
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
     df = df[["Close"]].copy()
     df.columns = ["close"]
+    df = df.dropna()
+    if len(df) < 2:
+        return None
     df["sma25"] = df["close"].rolling(25).mean()
     df["sma75"] = df["close"].rolling(75).mean()
     delta = df["close"].diff()
@@ -34,25 +41,30 @@ def load_data(ticker, period):
 with st.spinner("データ取得中..."):
     df = load_data(ticker, period)
 
+if df is None or len(df) < 2:
+    st.error("データを取得できませんでした。銘柄コードや期間を確認してください。")
+    st.stop()
+
 latest = df.iloc[-1]
 prev = df.iloc[-2]
-change = latest["close"] - prev["close"]
-change_pct = change / prev["close"] * 100
+change = float(latest["close"]) - float(prev["close"])
+change_pct = change / float(prev["close"]) * 100
 
 col1, col2, col3 = st.columns(3)
-col1.metric("現在値", f"{'$' if '.T' not in ticker else '¥'}{latest['close']:.2f}", f"{change:+.2f}（{change_pct:+.2f}%）")
-col2.metric("RSI", f"{latest['rsi']:.1f}")
-col3.metric("MA25", f"{latest['sma25']:.2f}")
+symbol = "¥" if ".T" in ticker else "$"
+col1.metric("現在値", f"{symbol}{float(latest['close']):.2f}", f"{change:+.2f}（{change_pct:+.2f}%）")
+col2.metric("RSI", f"{float(latest['rsi']):.1f}" if not pd.isna(latest['rsi']) else "計算中")
+col3.metric("MA25", f"{float(latest['sma25']):.2f}" if not pd.isna(latest['sma25']) else "計算中")
 
-# シグナル判断
 rsi_thresh = 60
-falling = latest["close"] < prev["close"]
-signal = latest["rsi"] <= rsi_thresh and falling
+falling = float(latest["close"]) < float(prev["close"])
+rsi_val = float(latest["rsi"]) if not pd.isna(latest["rsi"]) else 999
+signal = rsi_val <= rsi_thresh and falling
 
 if signal:
-    st.success("▶ エントリーシグナル点灯（RSI≤60かつ下落）")
+    st.success(f"▶ エントリーシグナル点灯（RSI {rsi_val:.1f}≤{rsi_thresh} かつ下落）")
 else:
-    st.info(f"待機中 | RSI {latest['rsi']:.1f} / 条件: RSI≤{rsi_thresh}かつ下落")
+    st.info(f"待機中 | RSI {rsi_val:.1f} / 条件: RSI≤{rsi_thresh} かつ下落")
 
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                     row_heights=[0.7, 0.3], vertical_spacing=0.05)
