@@ -7,32 +7,41 @@ from pandas.tseries.offsets import BDay
 
 st.set_page_config(page_title="大底・天井スコア", layout="wide")
 
-TICKERS = {
-    "KRUS（くら寿司USA）": "KRUS",
-    "COIN（コインベース）": "COIN",
-    "1328（金ETF）": "1328.T",
-    "NVDA（エヌビディア）": "NVDA",
-    "TSLA（テスラ）": "TSLA",
-    "GLD（金ETF米国）": "GLD",
-    "S&P500": "^GSPC",
-    "NASDAQ": "^IXIC",
-    "日経平均": "^N225",
+GROUPS = {
+    "📁 保有中": {
+        "COIN（コインベース）": "COIN",
+        "MARA（マラソンデジタル）": "MARA",
+        "TMF（米国債20年3倍）": "TMF",
+        "1328（金ETF・日本）": "1328.T",
+    },
+    "📁 短期戦略": {
+        "KRUS（くら寿司USA）": "KRUS",
+    },
+    "📁 監視": {
+        "CLSK（クリーンスパーク）": "CLSK",
+        "NVDA（エヌビディア）": "NVDA",
+        "TSLA（テスラ）": "TSLA",
+        "GLD（金ETF米国）": "GLD",
+        "SLV（銀ETF）": "SLV",
+        "SOFI（ソーファイ）": "SOFI",
+        "EWZ（ブラジルETF）": "EWZ",
+        "AMD": "AMD",
+        "XLE（エネルギーETF）": "XLE",
+    },
+    "📁 指数・コモディティ": {
+        "S&P500": "^GSPC",
+        "NASDAQ": "^IXIC",
+        "日経平均": "^N225",
+        "金（ゴールド）": "GC=F",
+        "銀（シルバー）": "SI=F",
+        "原油WTI": "CL=F",
+        "VIX（恐怖指数）": "^VIX",
+    },
 }
-
-st.title("📈 大底・天井スコア")
-st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
-
-col_l, col_r = st.columns([2,1])
-with col_l:
-    ticker_name = st.selectbox("銘柄を選択", list(TICKERS.keys()))
-with col_r:
-    custom = st.text_input("直接入力（例：AAPL）", "")
-
-ticker = custom.upper().strip() if custom.strip() else TICKERS[ticker_name]
-period = st.selectbox("データ期間（2年以上推奨）", ["2y","5y","10y","max"], index=1)
+ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
 
 @st.cache_data(ttl=3600)
-def load_data(ticker, period):
+def load_data(ticker, period="5y"):
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     if df.empty:
         return None
@@ -81,19 +90,6 @@ def load_data(ticker, period):
     df["days_from_low"] = d_low
     df["ma200_dev"] = (df["close"] - df["sma200"]) / df["sma200"] * 100
     return df
-with st.spinner("データ取得中..."):
-    df = load_data(ticker, period)
-
-if df is None:
-    st.error("データ不足です。期間を長くするかティッカーを確認してください（最低260営業日必要）。")
-    st.stop()
-
-latest = df.iloc[-1]
-prev = df.iloc[-2]
-change = float(latest["close"]) - float(prev["close"])
-change_pct = change / float(prev["close"]) * 100
-symbol = "¥" if (".T" in ticker or ticker.startswith("^N")) else "$"
-
 def calc_bottom_score(r):
     checks = [
         ("RSI≤30（日足）", bool(pd.notna(r["rsi"]) and r["rsi"] <= 30), f"現在{r['rsi']:.1f}" if pd.notna(r["rsi"]) else "-"),
@@ -123,6 +119,75 @@ def calc_top_score(r):
     ]
     return sum(1 for _,ok,_ in checks if ok), checks
 
+@st.cache_data(ttl=3600)
+def scan_all():
+    results = []
+    for label, tk in ALL_TICKERS:
+        try:
+            d = load_data(tk, "5y")
+            if d is None:
+                continue
+            bs, _ = calc_bottom_score(d.iloc[-1])
+            ts, _ = calc_top_score(d.iloc[-1])
+            results.append((label, tk, bs, ts))
+        except Exception:
+            continue
+    return results
+
+st.title("📈 大底・天井スコア")
+st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
+
+with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
+    scan = scan_all()
+
+alerts = []
+for label, tk, bs, ts in scan:
+    vix_b = "（VIX底=株の楽観・天井警戒）" if tk == "^VIX" else ""
+    vix_t = "（VIX天井=恐怖最大=株の買い場）" if tk == "^VIX" else ""
+    if bs >= 9:
+        alerts.append(("error", f"🟢 **{label}** 買いシグナル（大底{bs}/10）{vix_b}"))
+    elif bs == 8:
+        alerts.append(("warning", f"⚠️ **{label}** 買いゾーン接近（大底{bs}/10）{vix_b}"))
+    if ts >= 8:
+        alerts.append(("error", f"🔴 **{label}** 売りシグナル（天井{ts}/9）{vix_t}"))
+    elif ts == 7:
+        alerts.append(("warning", f"⚠️ **{label}** 天井警戒（天井{ts}/9）{vix_t}"))
+
+if alerts:
+    st.markdown("### 🚨 シグナル点灯中")
+    for kind, msg in alerts:
+        if kind == "error":
+            st.error(msg)
+        else:
+            st.warning(msg)
+else:
+    st.success(f"✅ 本日のシグナルなし（{len(scan)}銘柄スキャン済み）")
+st.divider()
+
+col_g, col_t = st.columns([1,2])
+with col_g:
+    group_name = st.selectbox("グループ", list(GROUPS.keys()))
+with col_t:
+    ticker_name = st.selectbox("銘柄を選択", list(GROUPS[group_name].keys()))
+custom = st.text_input("直接入力（米国株:AAPL / 日本株:4桁数字でOK 例:7203）", "")
+
+_c = custom.strip()
+ticker = (_c + ".T" if _c.isdigit() and len(_c) == 4 else _c.upper()) if _c else GROUPS[group_name][ticker_name]
+period = st.selectbox("データ期間（スコア計算用・5y推奨）", ["2y","5y","10y","max"], index=1)
+
+with st.spinner("データ取得中..."):
+    df = load_data(ticker, period)
+
+if df is None:
+    st.error("データ不足です。期間を長くするかティッカーを確認してください（最低260営業日必要）。")
+    st.stop()
+
+latest = df.iloc[-1]
+prev = df.iloc[-2]
+change = float(latest["close"]) - float(prev["close"])
+change_pct = change / float(prev["close"]) * 100
+symbol = "¥" if (".T" in ticker or ticker.startswith("^N")) else "$"
+
 bottom_score, bottom_checks = calc_bottom_score(latest)
 top_score, top_checks = calc_top_score(latest)
 st.markdown(f"### {ticker}")
@@ -131,6 +196,9 @@ c1.metric("現在値", f"{symbol}{float(latest['close']):,.2f}", f"{change:+,.2f
 c2.metric("日足RSI / 週足RSI", f"{float(latest['rsi']):.1f} / {float(latest['w_rsi']):.1f}" if pd.notna(latest['w_rsi']) else f"{float(latest['rsi']):.1f} / -")
 c3.metric("大底スコア", f"{bottom_score}/10")
 c4.metric("天井スコア", f"{top_score}/9")
+
+if ticker == "^VIX":
+    st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
 
 if bottom_score >= 9:
     st.error(f"🟢 **買いシグナル点灯（大底スコア{bottom_score}/10）**")
@@ -154,22 +222,55 @@ elif top_score == 7:
     st.warning(f"⚠️ 天井警戒（天井スコア{top_score}/9）")
 
 with st.expander("📋 スコア詳細（タップで開閉）", expanded=(bottom_score>=8 or top_score>=7)):
-    col_b, col_t = st.columns(2)
+    col_b, col_t2 = st.columns(2)
     with col_b:
         st.markdown(f"**大底スコア {bottom_score}/10**")
         for label, ok, detail in bottom_checks:
-            mark = "✅" if ok else "❌"
-            st.markdown(f"{mark} {label}　{detail}")
-    with col_t:
+            st.markdown(f"{'✅' if ok else '❌'} {label}　{detail}")
+    with col_t2:
         st.markdown(f"**天井スコア {top_score}/9**")
         for label, ok, detail in top_checks:
-            mark = "✅" if ok else "❌"
-            st.markdown(f"{mark} {label}　{detail}")
+            st.markdown(f"{'✅' if ok else '❌'} {label}　{detail}")
 
-period_options = {"3ヶ月":90,"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
-disp = st.radio("表示期間", list(period_options.keys()), index=2, horizontal=True)
+tf = st.radio("チャート時間軸", ["日足","週足","月足"], index=0, horizontal=True)
+
+def make_chart_frame(df, tf):
+    if tf == "日足":
+        base = df["close"]
+    elif tf == "週足":
+        base = df["close"].resample("W-FRI").last().dropna()
+    else:
+        try:
+            base = df["close"].resample("ME").last().dropna()
+        except ValueError:
+            base = df["close"].resample("M").last().dropna()
+    cd = pd.DataFrame({"close": base})
+    cd["sma25"] = cd["close"].rolling(25).mean()
+    cd["sma75"] = cd["close"].rolling(75).mean()
+    cd["sma200"] = cd["close"].rolling(200).mean()
+    delta = cd["close"].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    cd["rsi"] = 100 - (100/(1+gain/loss))
+    cd["bb_mid"] = cd["close"].rolling(20).mean()
+    s = cd["close"].rolling(20).std()
+    cd["bb_upper"] = cd["bb_mid"] + 2*s
+    cd["bb_lower"] = cd["bb_mid"] - 2*s
+    e12 = cd["close"].ewm(span=12).mean()
+    e26 = cd["close"].ewm(span=26).mean()
+    cd["macd"] = e12 - e26
+    cd["macd_signal"] = cd["macd"].ewm(span=9).mean()
+    cd["macd_hist"] = cd["macd"] - cd["macd_signal"]
+    return cd
+
+cframe = make_chart_frame(df, tf)
+
+period_options = {"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
+disp = st.radio("表示期間", list(period_options.keys()), index=1, horizontal=True)
 days = period_options[disp]
-chart_df = df if days >= 99999 else df[df.index >= pd.Timestamp.now() - pd.Timedelta(days=days)]
+chart_df = cframe if days >= 99999 else cframe[cframe.index >= pd.Timestamp.now() - pd.Timedelta(days=days)]
+if len(chart_df) < 5:
+    chart_df = cframe
 
 fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
                     row_heights=[0.55,0.25,0.20], vertical_spacing=0.03)
@@ -188,9 +289,7 @@ if not chart_df["sma200"].isna().all():
     fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["sma200"],
         name="MA200", line=dict(color="#f87171",width=1,dash="dot")), row=1, col=1)
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["rsi"],
-    name="RSI", line=dict(color="#34d399",width=1.5)), row=2, col=1)
-fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["w_rsi"],
-    name="週足RSI", line=dict(color="#fbbf24",width=1,dash="dot")), row=2, col=1)
+    name=f"RSI（{tf}）", line=dict(color="#34d399",width=1.5)), row=2, col=1)
 fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=2, col=1)
 fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=2, col=1)
 colors_hist = ["#4ade80" if v>=0 else "#f87171" for v in chart_df["macd_hist"].fillna(0)]
@@ -208,4 +307,4 @@ fig.update_yaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(title_text="RSI", row=2, col=1)
 fig.update_yaxes(title_text="MACD", row=3, col=1)
 st.plotly_chart(fig, use_container_width=True)
-st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | 買いシグナル的中率77%（クラスタ単位88-100%）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
+st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
