@@ -26,6 +26,9 @@ GROUPS = {
         "SOFI（ソーファイ）": "SOFI",
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
+                "SOXL（半導体3倍）⚠️未検証": "SOXL",
+        "QS（クアンタムスケープ）⚠️未検証": "QS",
+
         "XLE（エネルギーETF）": "XLE",
     },
     "📁 指数・コモディティ": {
@@ -136,6 +139,13 @@ def scan_all():
 
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
+with st.expander("📖 運用ルール（必ず確認）"):
+    st.markdown("""
+**シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
+**集中リスク**: 暗号資産系(COIN/MARA/CLSK/TMF)は1銘柄まで。半導体系(NVDA/SOXL)も1銘柄まで。
+**未検証(⚠️)**: SOFI/SOXL/QSは売買対象外・参考表示のみ。上場4年未満も対象外。
+**ボーナス資金**: 指数9/10+の歴史的局面のみ。投信積立は不変、追加資金は暗号資産以外(XLE/EWZ/SLV/AMD等)優先。
+""")
 
 with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
@@ -175,6 +185,8 @@ _c = custom.strip()
 ticker = (_c + ".T" if _c.isdigit() and len(_c) == 4 else _c.upper()) if _c else GROUPS[group_name][ticker_name]
 period = st.selectbox("データ期間（スコア計算用・5y推奨）", ["2y","5y","10y","max"], index=1)
 
+if _c:
+    st.warning("⚠️ 直接入力銘柄は未検証です。スコアは参考表示のみとし、売買前に検証を依頼してください。")
 with st.spinner("データ取得中..."):
     df = load_data(ticker, period)
 
@@ -306,5 +318,5 @@ fig.update_xaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(title_text="RSI", row=2, col=1)
 fig.update_yaxes(title_text="MACD", row=3, col=1)
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
 st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
