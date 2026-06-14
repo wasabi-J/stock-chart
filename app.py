@@ -277,22 +277,47 @@ def make_chart_frame(df, tf):
 
 cframe = make_chart_frame(df, tf)
 
-# === 過去のシグナル点灯日を計算（日足ベース）===
+# === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー）===
 @st.cache_data(ttl=3600)
 def calc_signal_history(_df, ticker_key):
-    bottom_days = []
-    top_days = []
+    raw_bottom = []
+    raw_top = []
     for idx in range(260, len(_df)):
         r = _df.iloc[idx]
         bs, _ = calc_bottom_score(r)
         ts, _ = calc_top_score(r)
         if bs >= 9:
-            bottom_days.append((_df.index[idx], float(r["close"]), bs))
+            raw_bottom.append((idx, _df.index[idx], float(r["close"]), bs))
         if ts >= 8:
-            top_days.append((_df.index[idx], float(r["close"]), ts))
+            raw_top.append((idx, _df.index[idx], float(r["close"]), ts))
+
+    def clusterize(raw, pick="low"):
+        if not raw:
+            return []
+        clusters = []
+        cur = [raw[0]]
+        for item in raw[1:]:
+            if item[0] - cur[-1][0] <= 10:
+                cur.append(item)
+            else:
+                clusters.append(cur)
+                cur = [item]
+        clusters.append(cur)
+        result = []
+        for c in clusters:
+            if pick == "low":
+                best = min(c, key=lambda x: x[2])
+            else:
+                best = max(c, key=lambda x: x[2])
+            result.append((best[1], best[2], best[3]))
+        return result
+
+    bottom_days = clusterize(raw_bottom, pick="low")
+    top_days = clusterize(raw_top, pick="high")
     return bottom_days, top_days
 
 sig_bottoms, sig_tops = calc_signal_history(df, ticker)
+
 show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
     help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼で表示")
 
