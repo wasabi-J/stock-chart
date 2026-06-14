@@ -277,6 +277,26 @@ def make_chart_frame(df, tf):
 
 cframe = make_chart_frame(df, tf)
 
+# === 過去のシグナル点灯日を計算（日足ベース）===
+@st.cache_data(ttl=3600)
+def calc_signal_history(_df, ticker_key):
+    bottom_days = []
+    top_days = []
+    for idx in range(260, len(_df)):
+        r = _df.iloc[idx]
+        bs, _ = calc_bottom_score(r)
+        ts, _ = calc_top_score(r)
+        if bs >= 9:
+            bottom_days.append((_df.index[idx], float(r["close"]), bs))
+        if ts >= 8:
+            top_days.append((_df.index[idx], float(r["close"]), ts))
+    return bottom_days, top_days
+
+sig_bottoms, sig_tops = calc_signal_history(df, ticker)
+show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
+    help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼で表示")
+
+
 period_options = {"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
 disp = st.radio("表示期間", list(period_options.keys()), index=1, horizontal=True)
 days = period_options[disp]
@@ -293,6 +313,27 @@ fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["bb_lower"],
     line=dict(color="rgba(100,100,255,0.2)",width=1), showlegend=False), row=1, col=1)
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["close"],
     name="終値", line=dict(color="#3a8fff",width=1.5)), row=1, col=1)
+
+if show_signals:
+    x_min = chart_df.index.min()
+    x_max = chart_df.index.max()
+    b_x = [d for d,p,s in sig_bottoms if x_min <= d <= x_max]
+    b_y = [p for d,p,s in sig_bottoms if x_min <= d <= x_max]
+    b_s = [s for d,p,s in sig_bottoms if x_min <= d <= x_max]
+    t_x = [d for d,p,s in sig_tops if x_min <= d <= x_max]
+    t_y = [p for d,p,s in sig_tops if x_min <= d <= x_max]
+    t_s = [s for d,p,s in sig_tops if x_min <= d <= x_max]
+    if b_x:
+        fig.add_trace(go.Scatter(x=b_x, y=b_y, mode="markers", name="大底点灯",
+            marker=dict(symbol="triangle-up", size=11, color="#22d3ee",
+                        line=dict(color="white", width=1)),
+            text=[f"大底{s}/10" for s in b_s], hoverinfo="text+x"), row=1, col=1)
+    if t_x:
+        fig.add_trace(go.Scatter(x=t_x, y=t_y, mode="markers", name="天井点灯",
+            marker=dict(symbol="triangle-down", size=11, color="#f43f5e",
+                        line=dict(color="white", width=1)),
+            text=[f"天井{s}/9" for s in t_s], hoverinfo="text+x"), row=1, col=1)
+
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["sma25"],
     name="MA25", line=dict(color="#f59e0b",width=1,dash="dash")), row=1, col=1)
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["sma75"],
@@ -318,5 +359,7 @@ fig.update_xaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(title_text="RSI", row=2, col=1)
 fig.update_yaxes(title_text="MACD", row=3, col=1)
-st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
+st.plotly_chart(fig, use_container_width=True,
+    config={"staticPlot": False, "scrollZoom": False, "displayModeBar": False})
+
 st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
