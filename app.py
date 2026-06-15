@@ -361,11 +361,11 @@ if show_hlines and len(chart_df) > 20:
         step = len(levels) / n
         return [levels[int(k*step)] for k in range(n)]
     for lv in thin(highs):
-        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(244,63,94,0.35)",
-                      line_width=1, row=1, col=1)
+        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(244,63,94,0.75)",
+                      line_width=1.5, row=1, col=1)
     for lv in thin(lows):
-        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(34,211,238,0.35)",
-                      line_width=1, row=1, col=1)
+        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(34,211,238,0.75)",
+                      line_width=1.5, row=1, col=1)
 
 if show_signals:
     x_min = chart_df.index.min()
