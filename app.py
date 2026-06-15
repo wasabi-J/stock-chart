@@ -307,7 +307,7 @@ def calc_signal_history(_df, ticker_key):
         for c in clusters:
             if pick == "low":
                 best = min(c, key=lambda x: x[2])
-            else:
+  ？          else:
                 best = max(c, key=lambda x: x[2])
             result.append((best[1], best[2], best[3]))
         return result
@@ -320,6 +320,9 @@ sig_bottoms, sig_tops = calc_signal_history(df, ticker)
 
 show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
     help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼で表示")
+show_hlines = st.checkbox("➖ 過去高値/安値の水平ラインを表示", value=False,
+    help="意識されやすい過去の高値(赤)・安値(水色)に水平線を引く")
+show_legend = st.checkbox("🏷️ チャート上部の線の説明（凡例）を表示", value=True)
 
 
 period_options = {"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
@@ -338,6 +341,34 @@ fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["bb_lower"],
     line=dict(color="rgba(100,100,255,0.2)",width=1), showlegend=False), row=1, col=1)
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["close"],
     name="終値", line=dict(color="#3a8fff",width=1.5)), row=1, col=1)
+# === 過去高値/安値の水平ライン（意識される価格帯）===
+if show_hlines and len(chart_df) > 20:
+    piv_w = 15
+    cl = chart_df["close"].values
+    idxs = chart_df.index
+    highs = []
+    lows = []
+    for i in range(piv_w, len(cl)-piv_w):
+        win = cl[i-piv_w:i+piv_w+1]
+        if cl[i] == win.max():
+            highs.append(cl[i])
+        if cl[i] == win.min():
+            lows.append(cl[i])
+    def thin(levels, n=4):
+        if not levels:
+            return []
+        levels = sorted(set(round(v,2) for v in levels))
+        if len(levels) <= n:
+            return levels
+        step = len(levels) / n
+        return [levels[int(k*step)] for k in range(n)]
+    for lv in thin(highs):
+        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(244,63,94,0.35)",
+                      line_width=1, row=1, col=1)
+    for lv in thin(lows):
+        fig.add_hline(y=lv, line_dash="dot", line_color="rgba(34,211,238,0.35)",
+                      line_width=1, row=1, col=1)
+
 
 if show_signals:
     x_min = chart_df.index.min()
@@ -379,12 +410,15 @@ fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["macd_signal"],
     name="シグナル", line=dict(color="#f87171",width=1)), row=3, col=1)
 fig.update_layout(height=700, paper_bgcolor="#070f18", plot_bgcolor="#0c1a28",
     font=dict(color="#c8d8e8"), legend=dict(orientation="h", y=1.02),
-    margin=dict(t=10,b=10))
+    showlegend=show_legend, margin=dict(t=10,b=10))
+
 fig.update_xaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(title_text="RSI", row=2, col=1)
 fig.update_yaxes(title_text="MACD", row=3, col=1)
 st.plotly_chart(fig, use_container_width=True,
-    config={"staticPlot": False, "scrollZoom": False, "displayModeBar": False})
+    config={"staticPlot": False, "scrollZoom": True, "displayModeBar": True,
+            "displaylogo": False,
+            "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
 
 st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
