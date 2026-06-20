@@ -10,7 +10,8 @@ st.set_page_config(page_title="大底・天井スコア", layout="wide")
 GROUPS = {
     "📁 保有中": {
         "COIN（コインベース）": "COIN",
-        "MARA（マラソンデジタル）": "MARA",
+        "MSTR（マイクロストラテジー）": "MSTR",
+        "EC（エコペトロール）": "EC",
         "TMF（米国債20年3倍）": "TMF",
         "1328（金ETF・日本）": "1328.T",
     },
@@ -18,6 +19,7 @@ GROUPS = {
         "KRUS（くら寿司USA）": "KRUS",
     },
     "📁 監視": {
+        "MARA（マラソンデジタル）": "MARA",
         "CLSK（クリーンスパーク）": "CLSK",
         "NVDA（エヌビディア）": "NVDA",
         "TSLA（テスラ）": "TSLA",
@@ -41,6 +43,9 @@ GROUPS = {
     },
 }
 ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
+
+# 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
+HELD_TICKERS = set(GROUPS["📁 保有中"].values())
 
 @st.cache_data(ttl=3600)
 def load_data(ticker, period="5y"):
@@ -136,41 +141,143 @@ def scan_all():
             continue
     return results
 
+# === フル点灯（大底10/10・天井9/9）の履歴を全銘柄ぶん集計（直近1年）===
+@st.cache_data(ttl=3600)
+def scan_full_history(days_back=365):
+    """全登録銘柄について、直近days_back日のフル点灯（大底10/10・天井9/9）を集める。
+    連続点灯はクラスタ化して1イベント1行にまとめる。各クラスタは点灯した最初の日を代表とする。"""
+    cutoff = pd.Timestamp.now() - pd.Timedelta(days=days_back)
+    events = []  # (date, label, ticker, kind, is_held)
+    for label, tk in ALL_TICKERS:
+        try:
+            d = load_data(tk, "2y")
+            if d is None:
+                continue
+            raw_b = []
+            raw_t = []
+            for idx in range(260, len(d)):
+                r = d.iloc[idx]
+                dt = d.index[idx]
+                if dt < cutoff:
+                    continue
+                bs, _ = calc_bottom_score(r)
+                ts, _ = calc_top_score(r)
+                if bs >= 10:
+                    raw_b.append(idx)
+                if ts >= 9:
+                    raw_t.append(idx)
+            def clusterize(raw):
+                if not raw:
+                    return []
+                clusters = []
+                cur = [raw[0]]
+                for x in raw[1:]:
+                    if x - cur[-1] <= 10:
+                        cur.append(x)
+                    else:
+                        clusters.append(cur)
+                        cur = [x]
+                clusters.append(cur)
+                return [c[0] for c in clusters]
+            is_held = tk in HELD_TICKERS
+            for idx in clusterize(raw_b):
+                events.append((d.index[idx], label, tk, "大底10/10", is_held))
+            for idx in clusterize(raw_t):
+                events.append((d.index[idx], label, tk, "天井9/9", is_held))
+        except Exception:
+            continue
+    events.sort(key=lambda e: e[0], reverse=True)
+    return events
+
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
 with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
-**集中リスク**: 暗号資産系(COIN/MARA/CLSK/TMF)は1銘柄まで。半導体系(NVDA/SOXL)も1銘柄まで。
+**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK/TMF)は1銘柄まで。半導体系(NVDA/SOXL)も1銘柄まで。
 **未検証(⚠️)**: SOFI/SOXL/QSは売買対象外・参考表示のみ。上場4年未満も対象外。
 **ボーナス資金**: 指数9/10+の歴史的局面のみ。投信積立は不変、追加資金は暗号資産以外(XLE/EWZ/SLV/AMD等)優先。
+**銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
 
 with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
 
+# === フル点灯チェック（最上段の特大警告用）===
+full_bottom = []  # (label, ticker, score, is_held)
+full_top = []
+for label, tk, bs, ts in scan:
+    if bs >= 10:
+        full_bottom.append((label, tk, bs, tk in HELD_TICKERS))
+    if ts >= 9:
+        full_top.append((label, tk, ts, tk in HELD_TICKERS))
+
+# 最上段：フル点灯の特大警告（保有銘柄は特に強調）
+if full_bottom or full_top:
+    has_held = any(h for *_, h in full_bottom) or any(h for *_, h in full_top)
+    if has_held:
+        st.markdown("# 🚨🚨 保有銘柄がフル点灯中 🚨🚨")
+    else:
+        st.markdown("# 🚨 フル点灯中 🚨")
+
+    def render_full(items, emoji, kind_label):
+        held = [x for x in items if x[3]]
+        others = [x for x in items if not x[3]]
+        for label, tk, score, is_held in held + others:
+            if is_held:
+                st.error(f"## {emoji}【保有】{label} {kind_label}（{score}点満点）→ 売買をClaudeに相談")
+            else:
+                st.error(f"### {emoji}{label} {kind_label}（{score}点満点）")
+
+    render_full(full_bottom, "🟢", "大底フル点灯")
+    render_full(full_top, "🔴", "天井フル点灯")
+    st.divider()
+
 alerts = []
 for label, tk, bs, ts in scan:
     vix_b = "（VIX底=株の楽観・天井警戒）" if tk == "^VIX" else ""
     vix_t = "（VIX天井=恐怖最大=株の買い場）" if tk == "^VIX" else ""
-    if bs >= 9:
+    # フル点灯は上で特大表示済みなので、ここではフル未満を従来通り表示
+    if bs == 9:
         alerts.append(("error", f"🟢 **{label}** 買いシグナル（大底{bs}/10）{vix_b}"))
     elif bs == 8:
         alerts.append(("warning", f"⚠️ **{label}** 買いゾーン接近（大底{bs}/10）{vix_b}"))
-    if ts >= 8:
+    if ts == 8:
         alerts.append(("error", f"🔴 **{label}** 売りシグナル（天井{ts}/9）{vix_t}"))
     elif ts == 7:
         alerts.append(("warning", f"⚠️ **{label}** 天井警戒（天井{ts}/9）{vix_t}"))
 
 if alerts:
-    st.markdown("### 🚨 シグナル点灯中")
+    st.markdown("### 🚨 シグナル点灯中（フル未満）")
     for kind, msg in alerts:
         if kind == "error":
             st.error(msg)
         else:
             st.warning(msg)
-else:
+elif not (full_bottom or full_top):
     st.success(f"✅ 本日のシグナルなし（{len(scan)}銘柄スキャン済み）")
+
+# === フル点灯の履歴（折りたたみ・直近1年・保有銘柄を強調）===
+with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井9/9のみ）"):
+    st.caption("多忙・体調不良で見逃した時の回収用。保有銘柄を最上部に強調表示。")
+    with st.spinner("履歴を集計中..."):
+        full_events = scan_full_history(365)
+    if not full_events:
+        st.info("直近1年でフル点灯（満点）はなかったのだ。")
+    else:
+        held_events = [e for e in full_events if e[4]]
+        other_events = [e for e in full_events if not e[4]]
+        if held_events:
+            st.markdown("#### ⭐ 保有銘柄のフル点灯")
+            for dt, label, tk, kind, _ in held_events:
+                color = "🟢" if "大底" in kind else "🔴"
+                st.markdown(f"- **{dt.strftime('%Y-%m-%d')}**　{color} **{label}**　{kind}")
+        if other_events:
+            st.markdown("#### 監視・その他銘柄のフル点灯")
+            for dt, label, tk, kind, _ in other_events:
+                color = "🟢" if "大底" in kind else "🔴"
+                st.markdown(f"- {dt.strftime('%Y-%m-%d')}　{color} {label}　{kind}")
+
 st.divider()
 
 col_g, col_t = st.columns([1,2])
@@ -211,7 +318,18 @@ c4.metric("天井スコア", f"{top_score}/9")
 if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
 
-if bottom_score >= 9:
+if bottom_score >= 10:
+    st.error(f"🟢🚨 **大底フル点灯（{bottom_score}/10 満点）**")
+    t1 = pd.Timestamp.today()
+    t2 = (t1 + BDay(15)).strftime("%m/%d")
+    t3 = (t1 + BDay(30)).strftime("%m/%d")
+    st.markdown(f"""**📋 大底ホームラン戦略（検証済：勝率54% EV+10.4%）**
+- 第1回買い: 本日（資金の1/3）
+- 第2回買い: {t2}頃（+15営業日、1/3）
+- 第3回買い: {t3}頃（+30営業日、1/3）
+- 利確: 平均取得単価 **+50%** / 損切: 平均取得単価 **-15%** / 最大保有180日
+- ⚠️ ファンダメンタル（事業・財務）の確認を忘れずに""")
+elif bottom_score == 9:
     st.error(f"🟢 **買いシグナル点灯（大底スコア{bottom_score}/10）**")
     t1 = pd.Timestamp.today()
     t2 = (t1 + BDay(15)).strftime("%m/%d")
@@ -227,7 +345,9 @@ elif bottom_score == 8:
 elif bottom_score >= 6:
     st.info(f"📊 大底圏（{bottom_score}/10）：監視継続")
 
-if top_score >= 8:
+if top_score >= 9:
+    st.error(f"🔴🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
+elif top_score == 8:
     st.error(f"🔴 **売りシグナル点灯（天井スコア{top_score}/9）**：保有していれば利確・リスク管理を検討")
 elif top_score == 7:
     st.warning(f"⚠️ 天井警戒（天井スコア{top_score}/9）")
