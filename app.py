@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pandas.tseries.offsets import BDay
@@ -189,6 +190,40 @@ def scan_full_history(days_back=365):
     events.sort(key=lambda e: e[0], reverse=True)
     return events
 
+# トレンドラインが効かない銘柄（暗号資産・高ボラ株）。これらはトレンド方向フィルター対象外
+TREND_EXCLUDE = {"COIN","MSTR","MARA","CLSK","RIOT","BTDR","SOXL","QS","SOFI"}
+
+@st.cache_data(ttl=3600)
+def monthly_trend_direction(ticker, period="max"):
+    """月足の移動チャネル（窓18ヶ月・相関0.3以上）で、直近のトレンド方向を判定。
+    戻り値: 'up'（上昇）/ 'down'（下降）/ 'range'（レンジ）/ None（対象外・データ不足）
+    検証結果：上昇トレンド中の大底はEV+34.8%・勝率47%（フィルター無し+19.7%より+15pt改善、前半後半とも成立=頑健）"""
+    if ticker in TREND_EXCLUDE:
+        return None  # 暗号資産・高ボラ株はトレンドライン無効
+    try:
+        d = load_data(ticker, period)
+        if d is None:
+            return None
+        s = d["close"].resample("ME").last().dropna()
+        vals = s.values
+        window = 18
+        if len(vals) < window + 1:
+            return None
+        seg = vals[-window:]
+        x = np.arange(len(seg))
+        corr = np.corrcoef(x, seg)[0, 1]
+        a, _ = np.polyfit(x, seg, 1)
+        slope_pct = a / seg.mean() * 100
+        if abs(corr) < 0.3:
+            return "range"
+        if slope_pct > 0.5:
+            return "up"
+        if slope_pct < -0.5:
+            return "down"
+        return "range"
+    except Exception:
+        return None
+
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
 with st.expander("📖 運用ルール（必ず確認）"):
@@ -267,16 +302,24 @@ with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井
     else:
         held_events = [e for e in full_events if e[4]]
         other_events = [e for e in full_events if not e[4]]
+        # 枠1：保有銘柄（直近1年すべて）
+        st.markdown("#### ⭐ 保有銘柄のフル点灯（直近1年）")
         if held_events:
-            st.markdown("#### ⭐ 保有銘柄のフル点灯")
             for dt, label, tk, kind, _ in held_events:
                 color = "🟢" if "大底" in kind else "🔴"
                 st.markdown(f"- **{dt.strftime('%Y-%m-%d')}**　{color} **{label}**　{kind}")
+        else:
+            st.caption("保有銘柄のフル点灯はなかったのだ。")
+        # 枠2：それ以外の銘柄（直近10件だけ）
+        st.markdown("#### 監視・その他銘柄のフル点灯（直近10件）")
         if other_events:
-            st.markdown("#### 監視・その他銘柄のフル点灯")
-            for dt, label, tk, kind, _ in other_events:
+            for dt, label, tk, kind, _ in other_events[:10]:
                 color = "🟢" if "大底" in kind else "🔴"
                 st.markdown(f"- {dt.strftime('%Y-%m-%d')}　{color} {label}　{kind}")
+            if len(other_events) > 10:
+                st.caption(f"（ほか{len(other_events)-10}件は省略。直近10件のみ表示）")
+        else:
+            st.caption("該当なしなのだ。")
 
 st.divider()
 
@@ -344,6 +387,20 @@ elif bottom_score == 8:
     st.warning(f"⚠️ 買いゾーン接近（大底スコア{bottom_score}/10）：あと1条件で買いシグナル")
 elif bottom_score >= 6:
     st.info(f"📊 大底圏（{bottom_score}/10）：監視継続")
+
+# === トレンド方向フィルター（大底スコア8以上の時に表示）===
+# 検証：上昇トレンド中の大底はEV+34.8%・勝率47%（フィルター無し+19.7%より+15pt改善・前半後半とも成立=頑健）
+# 「大局は順張り（上昇トレンド）、エントリーは逆張り（大底）」が最強
+if bottom_score >= 8:
+    trend = monthly_trend_direction(ticker)
+    if trend == "up":
+        st.success("📈 **月足トレンド：上昇中** → 上昇トレンド中の大底はEV+34.8%・勝率47%（最強の買い場）。資金を厚めに検討")
+    elif trend == "down":
+        st.warning("📉 **月足トレンド：下降中** → 下降トレンド中の大底はEV+12%と弱め。慎重に")
+    elif trend == "range":
+        st.info("➡️ **月足トレンド：レンジ（方向感なし）** → EV+16%と平凡。様子見も一案")
+    elif trend is None:
+        st.caption("ℹ️ この銘柄はトレンド方向フィルター対象外（暗号資産・高ボラ株はトレンドラインが効かないため）")
 
 if top_score >= 9:
     st.error(f"🔴🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
