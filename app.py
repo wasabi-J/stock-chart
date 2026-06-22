@@ -34,6 +34,7 @@ GROUPS = {
         "XLE（エネルギーETF）": "XLE",
     },
     "📁 指数・コモディティ": {
+        "BTC（ビットコイン）": "BTC-USD",
         "S&P500": "^GSPC",
         "NASDAQ": "^IXIC",
         "日経平均": "^N225",
@@ -224,6 +225,89 @@ def monthly_trend_direction(ticker, period="max"):
     except Exception:
         return None
 
+# === (え) モメンタム判定 ===
+# 検証：暗号資産・高ボラ株で「過去6ヶ月+50%上昇かつMA200より上」が買い、「MA200割れ」が売り
+# 全銘柄でフラットに表示（効かない銘柄も含めて経験として学ぶ方針）
+@st.cache_data(ttl=3600)
+def momentum_signal(ticker, period="max"):
+    """モメンタムシグナルを判定。
+    戻り値: 'buy'（過去6ヶ月+50%上昇かつMA200上）/ 'sell'（MA200割れ）/ None（どちらでもない・データ不足）"""
+    try:
+        d = load_data(ticker, period)
+        if d is None:
+            return None
+        c = d["close"]
+        if len(c) < 200:
+            return None
+        ma200 = c.rolling(200).mean().iloc[-1]
+        price = c.iloc[-1]
+        if pd.isna(ma200):
+            return None
+        # 過去6ヶ月（126営業日）の上昇率
+        if len(c) < 127:
+            return None
+        ret_6m = (price - c.iloc[-127]) / c.iloc[-127] * 100
+        # 買い：6ヶ月+50%上昇 かつ MA200より上
+        if ret_6m >= 50 and price > ma200:
+            return "buy"
+        # 売り：MA200を割れた
+        if price < ma200:
+            return "sell"
+        return None
+    except Exception:
+        return None
+
+# === (お) ダイバージェンス判定 ===
+# 強気ダイバージェンス＝株価は安値更新だがRSI(14)は切り上げ かつ RSI<45
+# 検証：月足=勝率79%（超強気の買い場サイン）、日足=勝率74%（補助）。週足は日足と大差なく不採用
+# 重要：「待つサイン」ではなく「もう底・買い場のサイン」
+def _rsi_series(c, period=14):
+    d = c.diff()
+    g = d.clip(lower=0).rolling(period).mean()
+    l = (-d.clip(upper=0)).rolling(period).mean()
+    return 100 - (100 / (1 + g / l))
+
+def _detect_divergence(s):
+    """直近で強気ダイバージェンスが発生しているか判定。発生していればTrue"""
+    r = _rsi_series(s)
+    vals = s.values
+    rvals = r.values
+    n = len(vals)
+    if n < 30:
+        return False
+    w = 3
+    lows = []
+    for i in range(max(w, n - 60), n - w):  # 直近60本以内の局所安値
+        if vals[i] == vals[i - w:i + w + 1].min():
+            lows.append(i)
+    for k in range(1, len(lows)):
+        ip, ic = lows[k - 1], lows[k]
+        if np.isnan(rvals[ip]) or np.isnan(rvals[ic]):
+            continue
+        # 株価は安値更新（下げ）だがRSIは切り上げ かつ RSI<45
+        if vals[ic] < vals[ip] and rvals[ic] > rvals[ip] and rvals[ic] < 45:
+            return True
+    return False
+
+@st.cache_data(ttl=3600)
+def divergence_signals(ticker, period="max"):
+    """月足・日足の強気ダイバージェンスを判定。
+    戻り値: dict {'monthly': bool, 'daily': bool}"""
+    result = {"monthly": False, "daily": False}
+    try:
+        d = load_data(ticker, period)
+        if d is None:
+            return result
+        c = d["close"]
+        # 日足
+        result["daily"] = _detect_divergence(c)
+        # 月足
+        sm = c.resample("ME").last().dropna()
+        result["monthly"] = _detect_divergence(sm)
+    except Exception:
+        pass
+    return result
+
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
 with st.expander("📖 運用ルール（必ず確認）"):
@@ -325,14 +409,14 @@ st.divider()
 
 col_g, col_t = st.columns([1,2])
 with col_g:
-    group_name = st.selectbox("グループ", list(GROUPS.keys()))
+    group_name = st.radio("グループ", list(GROUPS.keys()))
 with col_t:
-    ticker_name = st.selectbox("銘柄を選択", list(GROUPS[group_name].keys()))
+    ticker_name = st.radio("銘柄を選択", list(GROUPS[group_name].keys()))
 custom = st.text_input("直接入力（米国株:AAPL / 日本株:4桁数字でOK 例:7203）", "")
 
 _c = custom.strip()
 ticker = (_c + ".T" if _c.isdigit() and len(_c) == 4 else _c.upper()) if _c else GROUPS[group_name][ticker_name]
-period = st.selectbox("データ期間（スコア計算用・5y推奨）", ["2y","5y","10y","max"], index=1)
+period = st.radio("データ期間（スコア計算用・5y推奨）", ["2y","5y","10y","max"], index=1, horizontal=True)
 
 if _c:
     st.warning("⚠️ 直接入力銘柄は未検証です。スコアは参考表示のみとし、売買前に検証を依頼してください。")
@@ -408,6 +492,22 @@ elif top_score == 8:
     st.error(f"🔴 **売りシグナル点灯（天井スコア{top_score}/9）**：保有していれば利確・リスク管理を検討")
 elif top_score == 7:
     st.warning(f"⚠️ 天井警戒（天井スコア{top_score}/9）")
+
+# === (お) ダイバージェンス表示 ===
+# 月足=超強気の買い場サイン（勝率79%）、日足=補助（勝率74%）。「もう底・買い場」の意味
+_div = divergence_signals(ticker)
+if _div["monthly"]:
+    st.success("‼️‼️‼️ **月足ダイバージェンス発生** ‼️‼️‼️ → 超強気の買い場サイン（検証勝率79%・最強格）。株価は安値更新だがRSIは底打ち＝もう底が近い。待たずに買い場として検討")
+if _div["daily"]:
+    st.info("🔎 **日足ダイバージェンス発生** → 「そろそろ底・買い場が近い」の補助サイン（株価は下げているがRSIは下げ渋り）。待つより買い場として意識（取得単価を下げたいなら分割買い）")
+
+# === (え) モメンタムシグナル表示（全銘柄フラット）===
+# 買い=6ヶ月+50%上昇かつMA200上、売り=MA200割れ。買う買わないはわさびが都度判断
+_mom = momentum_signal(ticker)
+if _mom == "buy":
+    st.success("🚀 **モメンタム買いシグナル** → 過去6ヶ月+50%以上上昇かつMA200より上（順張りの勢い継続中）。3銘柄分散・1銘柄約3万円で検討")
+elif _mom == "sell":
+    st.warning("📉 **モメンタム売りシグナル** → MA200を割れた（順張りトレンド終了）。モメンタムで保有していれば売り検討")
 
 with st.expander("📋 スコア詳細（タップで開閉）", expanded=(bottom_score>=8 or top_score>=7)):
     col_b, col_t2 = st.columns(2)
