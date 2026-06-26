@@ -311,6 +311,58 @@ def divergence_signals(ticker, period="max"):
         pass
     return result
 
+# === ここぞ判定（最強条件アラート用）===
+# 検証で最強だった3つの強化条件：VIX30以上(EV+56%)・高ボラ(暗号資産EV+67%)・月足ダイバージェンス(勝率79%)
+# 大底8以上を必須に、3つ揃う=案A(🔥必買え)、2つ揃う=案B(⭐ここぞ)
+@st.cache_data(ttl=3600)
+def is_high_vol(ticker, period="5y"):
+    """直近20日ボラが60日平均より高いか"""
+    try:
+        d = load_data(ticker, period)
+        if d is None:
+            return False
+        c = d["close"]
+        vol20 = c.pct_change().rolling(20).std()
+        vol_ma = vol20.rolling(60).mean()
+        v, vm = vol20.iloc[-1], vol_ma.iloc[-1]
+        if pd.isna(v) or pd.isna(vm):
+            return False
+        return bool(v > vm)
+    except Exception:
+        return False
+
+@st.cache_data(ttl=3600)
+def get_vix_level():
+    """現在のVIX水準を取得"""
+    try:
+        d = load_data("^VIX", "5y")
+        return float(d["close"].iloc[-1]) if d is not None else None
+    except Exception:
+        return None
+
+def check_strongest(scan):
+    """大底8以上の銘柄で最強条件(VIX30・高ボラ・月足ダイバージェンス)を数える。
+    戻り値: (案A=3つ揃いリスト, 案B=2つ揃いリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
+    vix = get_vix_level()
+    vix30 = (vix is not None and vix >= 30)
+    case_a, case_b = [], []
+    for label, tk, bs, ts in scan:
+        if bs < 8 or tk in ("^VIX", "^TNX"):
+            continue
+        conds = []
+        if vix30:
+            conds.append("VIX30")
+        if is_high_vol(tk):
+            conds.append("高ボラ")
+        if divergence_signals(tk).get("monthly"):
+            conds.append("月足ダイバージェンス")
+        is_held = tk in HELD_TICKERS
+        if len(conds) >= 3:
+            case_a.append((label, tk, bs, is_held, conds))
+        elif len(conds) == 2:
+            case_b.append((label, tk, bs, is_held, conds))
+    return case_a, case_b
+
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
 with st.expander("📖 運用ルール（必ず確認）"):
@@ -324,6 +376,22 @@ with st.expander("📖 運用ルール（必ず確認）"):
 
 with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
+
+# === 最上段：ここぞアラート（最強条件が揃った銘柄）===
+# 案A=🔥必買え(3条件全部)、案B=⭐ここぞ(2条件)。検証で最強だった局面=逃すな
+case_a, case_b = check_strongest(scan)
+if case_a:
+    st.toast("🔥 必買えシグナル点灯！", icon="🔥")
+    for label, tk, bs, is_held, conds in case_a:
+        held_mark = "【保有】" if is_held else ""
+        st.markdown(f"# 🔥🔥 必買え：{held_mark}{label} 🔥🔥")
+        st.error(f"## 最強条件が3つ全部揃った（大底{bs}＋{' ＋ '.join(conds)}）→ 数年に一度の本物の底。ファンダ確認して即行動を検討！")
+    st.divider()
+if case_b:
+    for label, tk, bs, is_held, conds in case_b:
+        held_mark = "【保有】" if is_held else ""
+        st.warning(f"### ⭐ ここぞ：{held_mark}{label}（大底{bs}＋{' ＋ '.join(conds)}）→ 強い条件が重なってる。優先的に検討")
+    st.divider()
 
 # === フル点灯チェック（最上段の特大警告用）===
 full_bottom = []  # (label, ticker, score, is_held)
