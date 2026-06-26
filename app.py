@@ -26,6 +26,7 @@ GROUPS = {
         "TSLA（テスラ）": "TSLA",
         "GLD（金ETF米国）": "GLD",
         "SLV（銀ETF）": "SLV",
+        "1673（銀ETF・日本/WisdomTree）": "1673.T",
         "SOFI（ソーファイ）": "SOFI",
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
