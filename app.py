@@ -59,9 +59,19 @@ def load_data(ticker, period="5y"):
         return None
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    df = df[["Close"]].copy()
-    df.columns = ["close"]
-    df = df.dropna()
+    # OHLC（4本値）を保持してローソク足描画に使う。指標は終値ベース
+    keep = {}
+    for src, dst in [("Open", "open"), ("High", "high"), ("Low", "low"), ("Close", "close")]:
+        if src in df.columns:
+            keep[dst] = df[src]
+    df = pd.DataFrame(keep)
+    if "close" not in df.columns:
+        return None
+    # OHLCが欠ける指標(金利等)は終値で代用
+    for col in ["open", "high", "low"]:
+        if col not in df.columns:
+            df[col] = df["close"]
+    df = df.dropna(subset=["close"])
     if len(df) < 260:
         return None
     df["sma25"] = df["close"].rolling(25).mean()
@@ -341,8 +351,11 @@ def get_vix_level():
         return None
 
 def check_strongest(scan):
-    """大底8以上の銘柄で最強条件(VIX30・高ボラ・月足ダイバージェンス)を数える。
-    戻り値: (案A=3つ揃いリスト, 案B=2つ揃いリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
+    """大底8以上の銘柄で最強条件を判定。検証結果(2026-06-24)に基づきVIX30+高ボラベース。
+    検証：2条件の正体は「VIX30+高ボラ」(173回EV+45%・暗号資産+84%)、月足ダイバはここぞ判定には不要
+    (VIX30+月足ダイバは0回・高ボラ+月足ダイバはVIX30無しで-9.8%)。
+    🔥必買え=大底8+VIX30+高ボラ(両方)、⭐ここぞ=大底8+どちらか1つ。
+    戻り値: (case_a=必買えリスト, case_b=ここぞリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
     vix = get_vix_level()
     vix30 = (vix is not None and vix >= 30)
     case_a, case_b = [], []
@@ -354,12 +367,10 @@ def check_strongest(scan):
             conds.append("VIX30")
         if is_high_vol(tk):
             conds.append("高ボラ")
-        if divergence_signals(tk).get("monthly"):
-            conds.append("月足ダイバージェンス")
         is_held = tk in HELD_TICKERS
-        if len(conds) >= 3:
+        if len(conds) >= 2:        # VIX30 + 高ボラ = 本物のここぞ
             case_a.append((label, tk, bs, is_held, conds))
-        elif len(conds) == 2:
+        elif len(conds) == 1:      # どちらか片方
             case_b.append((label, tk, bs, is_held, conds))
     return case_a, case_b
 
@@ -377,20 +388,20 @@ with st.expander("📖 運用ルール（必ず確認）"):
 with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
 
-# === 最上段：ここぞアラート（最強条件が揃った銘柄）===
-# 案A=🔥必買え(3条件全部)、案B=⭐ここぞ(2条件)。検証で最強だった局面=逃すな
+# === 最上段：ここぞアラート（VIX30+高ボラ＝検証で最強の局面）===
+# 🔥必買え=大底8+VIX30+高ボラ(両方・EV+45%/暗号資産+84%・歴史的暴落の底)、⭐ここぞ=大底8+片方
 case_a, case_b = check_strongest(scan)
 if case_a:
-    st.toast("🔥 必買えシグナル点灯！", icon="🔥")
+    st.toast("🔥 確定演出！買い場確定！", icon="🔥")
     for label, tk, bs, is_held, conds in case_a:
         held_mark = "【保有】" if is_held else ""
-        st.markdown(f"# 🔥🔥 必買え：{held_mark}{label} 🔥🔥")
-        st.error(f"## 最強条件が3つ全部揃った（大底{bs}＋{' ＋ '.join(conds)}）→ 数年に一度の本物の底。ファンダ確認して即行動を検討！")
+        st.markdown(f"# 🔥🔥 確定演出：{held_mark}{label} 🔥🔥")
+        st.error(f"## VIX30＋高ボラが揃った（大底{bs}）→ 歴史的暴落の底。検証EV+45%(暗号資産+84%)。損切りライン決めて即行動を検討！")
     st.divider()
 if case_b:
     for label, tk, bs, is_held, conds in case_b:
         held_mark = "【保有】" if is_held else ""
-        st.warning(f"### ⭐ ここぞ：{held_mark}{label}（大底{bs}＋{' ＋ '.join(conds)}）→ 強い条件が重なってる。優先的に検討")
+        st.warning(f"### ⭐ ここぞ：{held_mark}{label}（大底{bs}＋{' ＋ '.join(conds)}）→ もう片方({'高ボラ' if 'VIX30' in conds else 'VIX30'})も揃えば必買え。優先的に検討")
     st.divider()
 
 # === フル点灯チェック（最上段の特大警告用）===
@@ -595,15 +606,24 @@ tf = st.radio("チャート時間軸", ["日足","週足","月足"], index=0, ho
 
 def make_chart_frame(df, tf):
     if tf == "日足":
-        base = df["close"]
-    elif tf == "週足":
-        base = df["close"].resample("W-FRI").last().dropna()
+        cd = pd.DataFrame({
+            "open": df["open"], "high": df["high"],
+            "low": df["low"], "close": df["close"],
+        })
     else:
+        rule = "W-FRI" if tf == "週足" else "ME"
         try:
-            base = df["close"].resample("ME").last().dropna()
+            o = df["open"].resample(rule).first()
+            h = df["high"].resample(rule).max()
+            lo = df["low"].resample(rule).min()
+            c = df["close"].resample(rule).last()
         except ValueError:
-            base = df["close"].resample("M").last().dropna()
-    cd = pd.DataFrame({"close": base})
+            rule = "W-FRI" if tf == "週足" else "M"
+            o = df["open"].resample(rule).first()
+            h = df["high"].resample(rule).max()
+            lo = df["low"].resample(rule).min()
+            c = df["close"].resample(rule).last()
+        cd = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
     cd["sma25"] = cd["close"].rolling(25).mean()
     cd["sma75"] = cd["close"].rolling(75).mean()
     cd["sma200"] = cd["close"].rolling(200).mean()
@@ -685,8 +705,12 @@ fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["bb_upper"],
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["bb_lower"],
     fill="tonexty", fillcolor="rgba(100,100,255,0.05)",
     line=dict(color="rgba(100,100,255,0.2)",width=1), showlegend=False), row=1, col=1)
-fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["close"],
-    name="終値", line=dict(color="#3a8fff",width=1.5)), row=1, col=1)
+fig.add_trace(go.Candlestick(x=chart_df.index,
+    open=chart_df["open"], high=chart_df["high"],
+    low=chart_df["low"], close=chart_df["close"],
+    name="株価", increasing_line_color="#ef4444", decreasing_line_color="#3a8fff",
+    increasing_fillcolor="#ef4444", decreasing_fillcolor="#3a8fff",
+    line=dict(width=1)), row=1, col=1)
 
 # === 過去高値/安値の水平ライン（意識される価格帯）===
 if show_hlines and len(chart_df) > 20:
@@ -755,7 +779,8 @@ fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["macd_signal"],
     name="シグナル", line=dict(color="#f87171",width=1)), row=3, col=1)
 fig.update_layout(height=700, paper_bgcolor="#070f18", plot_bgcolor="#0c1a28",
     font=dict(color="#c8d8e8"), legend=dict(orientation="h", y=1.02),
-    showlegend=show_legend, margin=dict(t=10,b=10))
+    showlegend=show_legend, margin=dict(t=10,b=10),
+    xaxis_rangeslider_visible=False)
 fig.update_xaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(title_text="RSI", row=2, col=1)
