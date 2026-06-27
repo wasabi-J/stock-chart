@@ -323,7 +323,7 @@ def divergence_signals(ticker, period="max"):
 
 # === ここぞ判定（最強条件アラート用）===
 # 検証で最強だった3つの強化条件：VIX30以上(EV+56%)・高ボラ(暗号資産EV+67%)・月足ダイバージェンス(勝率79%)
-# 大底8以上を必須に、3つ揃う=案A(🔥必買え)、2つ揃う=案B(⭐ここぞ)
+# 大底8以上を必須に、3つ揃う=案A(🔥確定演出)、2つ揃う=案B(⭐ここぞ)
 @st.cache_data(ttl=3600)
 def is_high_vol(ticker, period="5y"):
     """直近20日ボラが60日平均より高いか"""
@@ -354,8 +354,8 @@ def check_strongest(scan):
     """大底8以上の銘柄で最強条件を判定。検証結果(2026-06-24)に基づきVIX30+高ボラベース。
     検証：2条件の正体は「VIX30+高ボラ」(173回EV+45%・暗号資産+84%)、月足ダイバはここぞ判定には不要
     (VIX30+月足ダイバは0回・高ボラ+月足ダイバはVIX30無しで-9.8%)。
-    🔥必買え=大底8+VIX30+高ボラ(両方)、⭐ここぞ=大底8+どちらか1つ。
-    戻り値: (case_a=必買えリスト, case_b=ここぞリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
+    🔥確定演出=大底8+VIX30+高ボラ(両方)、⭐ここぞ=大底8+どちらか1つ。
+    戻り値: (case_a=確定演出リスト, case_b=ここぞリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
     vix = get_vix_level()
     vix30 = (vix is not None and vix >= 30)
     case_a, case_b = [], []
@@ -389,19 +389,38 @@ with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
 
 # === 最上段：ここぞアラート（VIX30+高ボラ＝検証で最強の局面）===
-# 🔥必買え=大底8+VIX30+高ボラ(両方・EV+45%/暗号資産+84%・歴史的暴落の底)、⭐ここぞ=大底8+片方
+# 🔥確定演出=大底8+VIX30+高ボラ(両方・EV+45%/暗号資産+84%・歴史的暴落の底)、⭐ここぞ=大底8+片方
+# フォント=Mochiy Pop One(Google Fonts・丸字ポップ)。確定演出は迫力を残し小さめ、ここぞは相談を促す控えめ表示
 case_a, case_b = check_strongest(scan)
-if case_a:
-    st.toast("🔥 確定演出！買い場確定！", icon="🔥")
+_FONT_CSS = """<style>
+@import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap');
+.kakutei-box{background:linear-gradient(135deg,#3a0a0a,#6e1010);border:1.5px solid #ff4040;
+ border-radius:9px;padding:9px 12px;margin-bottom:6px;box-shadow:0 0 10px rgba(255,50,50,0.4);
+ font-family:'Mochiy Pop One',sans-serif;}
+.kakutei-ttl{font-size:17px;color:#fff;text-shadow:0 0 6px #ff4040;margin-bottom:3px;}
+.kakutei-bdy{font-size:12px;line-height:1.45;color:#ffd8d8;}
+.kakutei-ev{color:#ffd040;}
+.kokozo-box{background:#2c2607;border:1px solid #b89020;border-radius:7px;
+ padding:7px 11px;margin-bottom:6px;font-family:'Mochiy Pop One',sans-serif;}
+.kokozo-ttl{font-size:13px;color:#e8d28a;margin-bottom:2px;}
+.kokozo-bdy{font-size:11px;line-height:1.4;color:#cabb80;}
+.held-tag{background:#1a4a2a;color:#5fe;font-size:10px;padding:0 5px;border-radius:3px;margin-right:4px;}
+</style>"""
+if case_a or case_b:
+    parts = [_FONT_CSS]
     for label, tk, bs, is_held, conds in case_a:
-        held_mark = "【保有】" if is_held else ""
-        st.markdown(f"# 🔥🔥 確定演出：{held_mark}{label} 🔥🔥")
-        st.error(f"## VIX30＋高ボラが揃った（大底{bs}）→ 歴史的暴落の底。検証EV+45%(暗号資産+84%)。損切りライン決めて即行動を検討！")
-    st.divider()
-if case_b:
+        hm = '<span class="held-tag">保有</span>' if is_held else ""
+        parts.append(f'<div class="kakutei-box"><div class="kakutei-ttl">🔥 確定演出：{hm}{label}</div>'
+            f'<div class="kakutei-bdy">VIX30＋高ボラが揃った（大底{bs}）→ 歴史的暴落の底。'
+            f'<span class="kakutei-ev">検証EV+45%(暗号資産+84%)</span>。損切りライン決めて即行動を検討！</div></div>')
     for label, tk, bs, is_held, conds in case_b:
-        held_mark = "【保有】" if is_held else ""
-        st.warning(f"### ⭐ ここぞ：{held_mark}{label}（大底{bs}＋{' ＋ '.join(conds)}）→ もう片方({'高ボラ' if 'VIX30' in conds else 'VIX30'})も揃えば必買え。優先的に検討")
+        hm = '<span class="held-tag">保有</span>' if is_held else ""
+        other = '高ボラ' if 'VIX30' in conds else 'VIX30'
+        parts.append(f'<div class="kokozo-box"><div class="kokozo-ttl">⭐ ここぞ：{hm}{label}</div>'
+            f'<div class="kokozo-bdy">大底{bs}＋{" ＋ ".join(conds)} → もう片方({other})も揃えば確定演出。相談して検討</div></div>')
+    st.markdown("".join(parts), unsafe_allow_html=True)
+    if case_a:
+        st.toast("🔥 確定演出！買い場確定！", icon="🔥")
     st.divider()
 
 # === フル点灯チェック（最上段の特大警告用）===
