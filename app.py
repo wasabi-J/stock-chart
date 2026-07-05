@@ -65,7 +65,7 @@ def load_data(ticker, period="5y"):
         df.columns = df.columns.get_level_values(0)
     # OHLC（4本値）を保持してローソク足描画に使う。指標は終値ベース
     keep = {}
-    for src, dst in [("Open", "open"), ("High", "high"), ("Low", "low"), ("Close", "close")]:
+    for src, dst in [("Open", "open"), ("High", "high"), ("Low", "low"), ("Close", "close"), ("Volume", "volume")]:
         if src in df.columns:
             keep[dst] = df[src]
     df = pd.DataFrame(keep)
@@ -115,7 +115,26 @@ def load_data(ticker, period="5y"):
     df["days_from_high"] = d_high
     df["days_from_low"] = d_low
     df["ma200_dev"] = (df["close"] - df["sma200"]) / df["sma200"] * 100
+        if "volume" in df.columns:
+        df["turnover_ma20"] = (df["close"] * df["volume"]).rolling(20).mean()
+    else:
+        df["turnover_ma20"] = np.nan
+
     return df
+    def check_liquidity(df, ticker):
+    """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日（スクリーニング基準と統一）。
+    戻り値: (売買代金, 閾値以上か, 通貨記号)"""
+    try:
+        to = df["turnover_ma20"].iloc[-1]
+        if pd.isna(to):
+            return None, None, ""
+        is_jp = (".T" in ticker) or ticker.startswith("^N")
+        thr = 100_000_000 if is_jp else 1_000_000_000
+        sym = "¥" if is_jp else "$"
+        return float(to), bool(to >= thr), sym
+    except Exception:
+        return None, None, ""
+
 def calc_bottom_score(r):
     checks = [
         ("RSI≤30（日足）", bool(pd.notna(r["rsi"]) and r["rsi"] <= 30), f"現在{r['rsi']:.1f}" if pd.notna(r["rsi"]) else "-"),
@@ -626,6 +645,13 @@ if w_score is not None:
         st.caption(f"📅 週足スコア {w_score}/10（日足={bottom_score}）｜7-8=資金厚めの材料・9は満点警戒。日足シグナルの確認バッジ")
     else:
         st.caption(f"💧 週足スコア {w_score}/10（日足={bottom_score}）｜週足<5=浅い底で見送り寄り")
+_to, _liq, _tsym = check_liquidity(df, ticker)
+if _to is not None:
+    _to_disp = f"{_to/1e8:.1f}億" if _tsym == "¥" else f"{_to/1e6:.0f}百万"
+    if _liq:
+        st.caption(f"💰 20日平均売買代金 {_tsym}{_to_disp}/日｜流動性OK（テクニカルが機能する水準）")
+    else:
+        st.caption(f"💧 20日平均売買代金 {_tsym}{_to_disp}/日｜薄商い（テクニカルがダマシになりやすい・7325型）")
 
 if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
