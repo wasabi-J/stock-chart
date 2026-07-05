@@ -115,7 +115,7 @@ def load_data(ticker, period="5y"):
     df["days_from_high"] = d_high
     df["days_from_low"] = d_low
     df["ma200_dev"] = (df["close"] - df["sma200"]) / df["sma200"] * 100
-         if "volume" in df.columns:
+     if "volume" in df.columns:
         df["turnover_ma20"] = (df["close"] * df["volume"]).rolling(20).mean()
     else:
         df["turnover_ma20"] = np.nan
