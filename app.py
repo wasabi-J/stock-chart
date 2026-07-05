@@ -144,6 +144,67 @@ def calc_top_score(r):
         ("週足RSI≥70", bool(pd.notna(r["w_rsi"]) and r["w_rsi"] >= 70), f"現在{r['w_rsi']:.1f}" if pd.notna(r["w_rsi"]) else "-"),
     ]
     return sum(1 for _,ok,_ in checks if ok), checks
+def calc_weekly_bottom_score(df):
+    """週足バーで大底10条件を計算（検証2026-07-03：週足<5は足切り・7-8は資金厚めの材料・9は満点警戒）。
+    完成した週足バーのみ使用（進行中の週は除外＝ルックアヘッド防止）。上位足チェックは月足RSI≤30。
+    戻り値: (週足スコア, 週足フル判定可能か)"""
+    try:
+        c = df["close"].resample("W-FRI").last().dropna()
+        if len(c) < 60:
+            return None, False
+        # 進行中の週を除外（最新バーの金曜が未来or今日なら落とす）
+        last_fri = c.index[-1]
+        if last_fri.normalize() >= pd.Timestamp.now().normalize():
+            c = c.iloc[:-1]
+        if len(c) < 60:
+            return None, False
+        w = pd.DataFrame({"close": c})
+        w["sma25"] = w["close"].rolling(25).mean()
+        w["sma200"] = w["close"].rolling(200).mean()
+        d = w["close"].diff()
+        g = d.clip(lower=0).rolling(14).mean()
+        l = (-d.clip(upper=0)).rolling(14).mean()
+        w["rsi"] = 100 - (100/(1+g/l))
+        mid = w["close"].rolling(20).mean()
+        sd = w["close"].rolling(20).std()
+        w["bb_lower"] = mid - 2*sd
+        e12 = w["close"].ewm(span=12).mean()
+        e26 = w["close"].ewm(span=26).mean()
+        w["macd_hist"] = (e12-e26) - (e12-e26).ewm(span=9).mean()
+        w["roll_high"] = w["close"].rolling(52, min_periods=1).max()
+        w["roll_low"] = w["close"].rolling(52, min_periods=1).min()
+        w["dd"] = (w["close"]-w["roll_high"])/w["roll_high"]*100
+        w["rally"] = (w["close"]-w["roll_low"])/w["roll_low"]*100
+        vals = w["close"].values
+        n = len(vals)
+        wfh = [0]*n
+        for i in range(n):
+            win = vals[max(0,i-52):i+1]
+            wfh[i] = (len(win)-1) - int(win.argmax())
+        w["wfh"] = wfh
+        w["dev"] = (w["close"]-w["sma200"])/w["sma200"]*100
+        m = df["close"].resample("ME").last().dropna()
+        md = m.diff()
+        mg = md.clip(lower=0).rolling(14).mean()
+        ml = (-md.clip(upper=0)).rolling(14).mean()
+        m_rsi = (100 - (100/(1+mg/ml))).reindex(w.index, method="ffill")
+        w["m_rsi"] = m_rsi
+        r = w.iloc[-1]
+        score = 0
+        score += 1 if (pd.notna(r["rsi"]) and r["rsi"] <= 30) else 0
+        score += 1 if (pd.notna(r["bb_lower"]) and r["close"] <= r["bb_lower"]*1.05) else 0
+        score += 1 if (pd.notna(r["sma25"]) and r["close"] < r["sma25"]) else 0
+        score += 1 if (pd.notna(r["sma200"]) and r["close"] < r["sma200"]) else 0
+        score += 1 if (pd.notna(r["macd_hist"]) and r["macd_hist"] < 0) else 0
+        score += 1 if (r["dd"] <= -30) else 0
+        score += 1 if (r["wfh"] >= 12) else 0
+        score += 1 if (pd.notna(r["m_rsi"]) and r["m_rsi"] <= 30) else 0
+        score += 1 if (r["rally"] <= 5) else 0
+        score += 1 if (pd.notna(r["dev"]) and r["dev"] <= -20) else 0
+        w_full = pd.notna(r["sma200"])
+        return score, bool(w_full)
+    except Exception:
+        return None, False
 
 @st.cache_data(ttl=3600)
 def scan_all():
