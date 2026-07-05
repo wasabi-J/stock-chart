@@ -621,6 +621,11 @@ c1.metric("現在値", f"{symbol}{float(latest['close']):,.2f}", f"{change:+,.2f
 c2.metric("日足RSI / 週足RSI", f"{float(latest['rsi']):.1f} / {float(latest['w_rsi']):.1f}" if pd.notna(latest['w_rsi']) else f"{float(latest['rsi']):.1f} / -")
 c3.metric("大底スコア", f"{bottom_score}/10")
 c4.metric("天井スコア", f"{top_score}/9")
+if w_score is not None:
+    if w_score >= 5:
+        st.caption(f"📅 週足スコア {w_score}/10（日足={bottom_score}）｜7-8=資金厚めの材料・9は満点警戒。日足シグナルの確認バッジ")
+    else:
+        st.caption(f"💧 週足スコア {w_score}/10（日足={bottom_score}）｜週足<5=浅い底で見送り寄り")
 
 if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
