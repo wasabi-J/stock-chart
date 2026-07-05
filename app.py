@@ -123,7 +123,7 @@ def load_data(ticker, period="5y"):
 
     return df
     def check_liquidity(df, ticker):
-    """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日（スクリーニング基準と統一）。
+    """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日。
     戻り値: (売買代金, 閾値以上か, 通貨記号)"""
     try:
         to = df["turnover_ma20"].iloc[-1]
