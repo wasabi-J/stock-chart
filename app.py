@@ -654,6 +654,9 @@ if _to is not None:
     else:
         st.caption(f"💧 20日平均売買代金 {_tsym}{_to_disp}/日｜薄商い（テクニカルがダマシになりやすい・7325型）")
 
+_p = float(latest["close"])
+st.caption(f"🎯 今買うなら｜損切り-15%＝{symbol}{_p*0.85:,.2f}｜+50%＝{symbol}{_p*1.5:,.2f}｜+100%＝{symbol}{_p*2:,.2f}｜+300%＝{symbol}{_p*4:,.2f}｜+500%＝{symbol}{_p*6:,.2f}（※3分割後は平均取得単価が基準）")
+
 if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
 
