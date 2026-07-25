@@ -891,17 +891,36 @@ if show_hlines and len(chart_df) > 20:
 if show_signals:
     x_min = chart_df.index.min()
     x_max = chart_df.index.max()
-    b_x = [d for d,p,s in sig_bottoms if x_min <= d <= x_max]
-    b_y = [p for d,p,s in sig_bottoms if x_min <= d <= x_max]
-    b_s = [s for d,p,s in sig_bottoms if x_min <= d <= x_max]
-    t_x = [d for d,p,s in sig_tops if x_min <= d <= x_max]
-    t_y = [p for d,p,s in sig_tops if x_min <= d <= x_max]
-    t_s = [s for d,p,s in sig_tops if x_min <= d <= x_max]
-    if b_x:
-        fig.add_trace(go.Scatter(x=b_x, y=b_y, mode="markers", name="大底点灯",
+    # フル点灯(大底10/天井9)とそれ未満を分離。フルは💎⛔、未満は▲▼
+    b_reg = [(d,p,s) for d,p,s in sig_bottoms if x_min <= d <= x_max and s < 10]
+    b_full = [(d,p,s) for d,p,s in sig_bottoms if x_min <= d <= x_max and s >= 10]
+    t_reg = [(d,p,s) for d,p,s in sig_tops if x_min <= d <= x_max and s < 9]
+    t_full = [(d,p,s) for d,p,s in sig_tops if x_min <= d <= x_max and s >= 9]
+    if b_reg:
+        fig.add_trace(go.Scatter(x=[d for d,p,s in b_reg], y=[p for d,p,s in b_reg],
+            mode="markers", name="大底点灯",
             marker=dict(symbol="triangle-up", size=11, color="#22d3ee",
                         line=dict(color="white", width=1)),
-            text=[f"大底{s}/10" for s in b_s], hoverinfo="text+x"), row=1, col=1)
+            text=[f"大底{s}/10" for d,p,s in b_reg], hoverinfo="text+x"), row=1, col=1)
+    if t_reg:
+        fig.add_trace(go.Scatter(x=[d for d,p,s in t_reg], y=[p for d,p,s in t_reg],
+            mode="markers", name="天井点灯",
+            marker=dict(symbol="triangle-down", size=11, color="#f43f5e",
+                        line=dict(color="white", width=1)),
+            text=[f"天井{s}/9" for d,p,s in t_reg], hoverinfo="text+x"), row=1, col=1)
+    if b_full:
+        fig.add_trace(go.Scatter(x=[d for d,p,s in b_full], y=[p for d,p,s in b_full],
+            mode="text", name="大底フル点灯",
+            text=["💎" for _ in b_full], textposition="bottom center",
+            textfont=dict(size=20),
+            hovertext=[f"大底フル{s}/10" for d,p,s in b_full], hoverinfo="text+x"), row=1, col=1)
+    if t_full:
+        fig.add_trace(go.Scatter(x=[d for d,p,s in t_full], y=[p for d,p,s in t_full],
+            mode="text", name="天井フル点灯",
+            text=["⛔" for _ in t_full], textposition="top center",
+            textfont=dict(size=20),
+            hovertext=[f"天井フル{s}/9" for d,p,s in t_full], hoverinfo="text+x"), row=1, col=1)
+
     if t_x:
         fig.add_trace(go.Scatter(x=t_x, y=t_y, mode="markers", name="天井点灯",
             marker=dict(symbol="triangle-down", size=11, color="#f43f5e",
