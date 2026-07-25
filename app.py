@@ -265,7 +265,7 @@ def scan_full_history(days_back=365):
             d = load_data(tk, "2y")
             if d is None:
                           for idx in range(260, len(d)):
-                r = d.iloc[idx]
+                    r = d.iloc[idx]
                 dt = d.index[idx]
                 if dt < cutoff:
                     continue
