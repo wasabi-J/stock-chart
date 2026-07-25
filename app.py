@@ -19,18 +19,14 @@ GROUPS = {
         "KRUS（くら寿司USA）": "KRUS",
     },
     "📁 監視": {
-            "SHAK（シェイクシャック）": "SHAK",
-
-                "JNJ（J&J・守り優等生）": "JNJ",
+        "SHAK（シェイクシャック）": "SHAK",
+        "JNJ（J&J・守り優等生）": "JNJ",
         "PG（P&G・守り）": "PG",
         "CRM（セールスフォース・攻め）": "CRM",
-
-                "AVAV（エアロバイロンメント）": "AVAV",
-
+        "AVAV（エアロバイロンメント）": "AVAV",
         "BABA（アリババ・売却済→監視）": "BABA",
         "7325（アイリック・見送り→監視）": "7325.T",
-                "3549（クスリのアオキ・優待）": "3549.T",
-
+        "3549（クスリのアオキ・優待）": "3549.T",
         "MARA（マラソンデジタル）": "MARA",
         "CLSK（クリーンスパーク）": "CLSK",
         "NVDA（エヌビディア）": "NVDA",
@@ -41,11 +37,9 @@ GROUPS = {
         "SOFI（ソーファイ）": "SOFI",
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
-                    "RIVN（リビアン・EV）": "RIVN",
-
-                "OLED（ユニバーサルディスプレイ）": "OLED",
-
-                "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
+        "RIVN（リビアン・EV）": "RIVN",
+        "OLED（ユニバーサルディスプレイ）": "OLED",
+        "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
         "QS（クアンタムスケープ）🔬検証済:対象外": "QS",
         "XLE（エネルギーETF）": "XLE",
         "EC（エコペトロール・売却済）": "EC",
@@ -131,9 +125,8 @@ def load_data(ticker, period="5y"):
         df["turnover_ma20"] = (df["close"] * df["volume"]).rolling(20).mean()
     else:
         df["turnover_ma20"] = np.nan
-
-
     return df
+
 def check_liquidity(df, ticker):
     """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日。
     戻り値: (売買代金, 閾値以上か, 通貨記号)"""
@@ -176,6 +169,7 @@ def calc_top_score(r):
         ("週足RSI≥70", bool(pd.notna(r["w_rsi"]) and r["w_rsi"] >= 70), f"現在{r['w_rsi']:.1f}" if pd.notna(r["w_rsi"]) else "-"),
     ]
     return sum(1 for _,ok,_ in checks if ok), checks
+
 def calc_weekly_bottom_score(df):
     """週足バーで大底10条件を計算（検証2026-07-03：週足<5は足切り・7-8は資金厚めの材料・9は満点警戒）。
     完成した週足バーのみ使用（進行中の週は除外＝ルックアヘッド防止）。上位足チェックは月足RSI≤30。
@@ -264,8 +258,11 @@ def scan_full_history(days_back=365):
         try:
             d = load_data(tk, "2y")
             if d is None:
-                          for idx in range(260, len(d)):
-            r = d.iloc[idx]
+                continue
+            raw_b = []
+            raw_t = []
+            for idx in range(260, len(d)):
+                r = d.iloc[idx]
                 dt = d.index[idx]
                 if dt < cutoff:
                     continue
@@ -284,10 +281,6 @@ def scan_full_history(days_back=365):
                     ts, _ = calc_top_score(r)
                     if ts >= 9:
                         raw_t.append(idx)
-  continue
-            raw_b = []
-            raw_t = []
-            
             def clusterize(raw):
                 if not raw:
                     return []
@@ -482,7 +475,7 @@ def check_strongest(scan):
     return case_a, case_b
 
 st.title("📈 大底・天井スコア")
-st.caption("大底10条件・天井9条件 | 15銘柄・36年・250大底で検証 | 買い:スコア9+ 売り:天井8+")
+st.caption("大底10条件・天井9条件 | 買い:スコア9+ 売り:天井8+")
 
 # === 更新ボタン（放置でフリーズ・文字が白くなる対策）===
 # 押すとキャッシュを全クリアして最新データで再実行する
@@ -564,8 +557,8 @@ if full_bottom or full_top:
             else:
                 st.error(f"### {emoji}{label} {kind_label}（{score}点満点）")
 
-    render_full(full_bottom, "🟢", "大底フル点灯")
-    render_full(full_top, "🔴", "天井フル点灯")
+    render_full(full_bottom, "💎", "大底フル点灯")
+    render_full(full_top, "⛔", "天井フル点灯")
     st.divider()
 
 alerts = []
@@ -611,16 +604,16 @@ with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井
         st.markdown("#### ⭐ 保有銘柄のフル点灯（直近1年）")
         if held_events:
             for dt, label, tk, kind, _ in held_events:
-                color = "🟢" if "大底" in kind else "🔴"
-                st.markdown(f"- **{dt.strftime('%Y-%m-%d')}**　{color} **{label}**　{kind}")
+                mark = "💎" if "大底" in kind else "⛔"
+                st.markdown(f"- **{dt.strftime('%Y-%m-%d')}**　{mark} **{label}**　{kind}")
         else:
             st.caption("保有銘柄のフル点灯はなかったのだ。")
         # 枠2：それ以外の銘柄（直近10件だけ）
         st.markdown("#### 監視・その他銘柄のフル点灯（直近10件）")
         if other_events:
             for dt, label, tk, kind, _ in other_events[:10]:
-                color = "🟢" if "大底" in kind else "🔴"
-                st.markdown(f"- {dt.strftime('%Y-%m-%d')}　{color} {label}　{kind}")
+                mark = "💎" if "大底" in kind else "⛔"
+                st.markdown(f"- {dt.strftime('%Y-%m-%d')}　{mark} {label}　{kind}")
             if len(other_events) > 10:
                 st.caption(f"（ほか{len(other_events)-10}件は省略。直近10件のみ表示）")
         else:
@@ -684,7 +677,7 @@ if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
 
 if bottom_score >= 10:
-    st.error(f"🟢🚨 **大底フル点灯（{bottom_score}/10 満点）**")
+    st.error(f"💎🚨 **大底フル点灯（{bottom_score}/10 満点）**")
     t1 = pd.Timestamp.today()
     t2 = (t1 + BDay(15)).strftime("%m/%d")
     t3 = (t1 + BDay(30)).strftime("%m/%d")
@@ -725,7 +718,7 @@ if bottom_score >= 8:
         st.caption("ℹ️ この銘柄はトレンド方向フィルター対象外（暗号資産・高ボラ株はトレンドラインが効かないため）")
 
 if top_score >= 9:
-    st.error(f"🔴🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
+    st.error(f"⛔🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
 elif top_score == 8:
     st.error(f"🔴 **売りシグナル点灯（天井スコア{top_score}/9）**：保有していれば利確・リスク管理を検討")
 elif top_score == 7:
