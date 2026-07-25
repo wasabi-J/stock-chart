@@ -921,12 +921,6 @@ if show_signals:
             textfont=dict(size=20),
             hovertext=[f"天井フル{s}/9" for d,p,s in t_full], hoverinfo="text+x"), row=1, col=1)
 
-    if t_x:
-        fig.add_trace(go.Scatter(x=t_x, y=t_y, mode="markers", name="天井点灯",
-            marker=dict(symbol="triangle-down", size=11, color="#f43f5e",
-                        line=dict(color="white", width=1)),
-            text=[f"天井{s}/9" for s in t_s], hoverinfo="text+x"), row=1, col=1)
-
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["sma25"],
     name="MA25", line=dict(color="#f59e0b",width=1,dash="dash")), row=1, col=1)
 fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["sma75"],
