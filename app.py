@@ -264,20 +264,30 @@ def scan_full_history(days_back=365):
         try:
             d = load_data(tk, "2y")
             if d is None:
-                continue
-            raw_b = []
-            raw_t = []
-            for idx in range(260, len(d)):
+                          for idx in range(260, len(d)):
                 r = d.iloc[idx]
                 dt = d.index[idx]
                 if dt < cutoff:
                     continue
-                bs, _ = calc_bottom_score(r)
-                ts, _ = calc_top_score(r)
-                if bs >= 10:
-                    raw_b.append(idx)
-                if ts >= 9:
-                    raw_t.append(idx)
+                # 早期スキップ：フル点灯は必須条件を満たさない日は数学的に不可能
+                # 大底10/10にはRSI≤30が必須、天井9/9にはRSI≥70が必須
+                rsi_v = r["rsi"]
+                can_bottom = pd.notna(rsi_v) and rsi_v <= 30
+                can_top = pd.notna(rsi_v) and rsi_v >= 70
+                if not can_bottom and not can_top:
+                    continue
+                if can_bottom:
+                    bs, _ = calc_bottom_score(r)
+                    if bs >= 10:
+                        raw_b.append(idx)
+                if can_top:
+                    ts, _ = calc_top_score(r)
+                    if ts >= 9:
+                        raw_t.append(idx)
+  continue
+            raw_b = []
+            raw_t = []
+            
             def clusterize(raw):
                 if not raw:
                     return []
@@ -647,7 +657,6 @@ symbol = "¥" if (".T" in ticker or ticker.startswith("^N")) else "$"
 bottom_score, bottom_checks = calc_bottom_score(latest)
 top_score, top_checks = calc_top_score(latest)
 w_score, _ = calc_weekly_bottom_score(df)
-
 
 st.markdown(f"### {ticker}")
 c1,c2,c3,c4 = st.columns(4)
