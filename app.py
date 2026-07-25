@@ -646,7 +646,8 @@ symbol = "¥" if (".T" in ticker or ticker.startswith("^N")) else "$"
 
 bottom_score, bottom_checks = calc_bottom_score(latest)
 top_score, top_checks = calc_top_score(latest)
-w_score, w_full = calc_weekly_bottom_score(df)
+w_score, _ = calc_weekly_bottom_score(df)
+
 
 st.markdown(f"### {ticker}")
 c1,c2,c3,c4 = st.columns(4)
