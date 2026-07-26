@@ -37,9 +37,8 @@ GROUPS = {
         "SOFI（ソーファイ）": "SOFI",
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
-                "ESAB（溶接・切断機器）": "ESAB",
+        "ESAB（溶接・切断機器）": "ESAB",
         "TTD（トレードデスク・広告）": "TTD",
-
         "RIVN（リビアン・EV）": "RIVN",
         "OLED（ユニバーサルディスプレイ）": "OLED",
         "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
@@ -731,7 +730,7 @@ elif top_score == 7:
 # 月足=超強気の買い場サイン（勝率79%）、日足=補助（勝率74%）。「もう底・買い場」の意味
 _div = divergence_signals(ticker)
 if _div["monthly"]:
-    st.success("‼️‼️‼️ **月足ダイバージェンス発生** ‼️‼️‼️ → 超強気の買い場サイン（検証勝率79%・最強格）。株価は安値更新だがRSIは底打ち＝もう底が近い。待たずに買い場として検討")
+    st.success("‼️‼️‼️ **月足ダイバージェンス発生** ‼️‼️‼ → 超強気の買い場サイン（検証勝率79%・最強格）。株価は安値更新だがRSIは底打ち＝もう底が近い。待たずに買い場として検討")
 if _div["daily"]:
     st.info("🔎 **日足ダイバージェンス発生** → 「そろそろ底・買い場が近い」の補助サイン（株価は下げているがRSIは下げ渋り）。待つより買い場として意識（取得単価を下げたいなら分割買い）")
 
@@ -796,7 +795,7 @@ def make_chart_frame(df, tf):
 
 cframe = make_chart_frame(df, tf)
 
-# === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー）===
+# === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー。フル点灯は全て個別表示）===
 @st.cache_data(ttl=3600)
 def calc_signal_history(_df, ticker_key):
     raw_bottom = []
@@ -810,18 +809,25 @@ def calc_signal_history(_df, ticker_key):
         if ts >= 8:
             raw_top.append((idx, _df.index[idx], float(r["close"]), ts))
 
-    def clusterize(raw, pick="low"):
+    def clusterize(raw, pick="low", full_thr=None):
         if not raw:
             return []
+        # フル点灯（full_thr以上）は集約せず全て個別に残す
+        full_days = [(item[1], item[2], item[3]) for item in raw
+                     if full_thr is not None and item[3] >= full_thr]
+        # フル未満だけクラスタリング対象にする
+        sub = [item for item in raw
+               if not (full_thr is not None and item[3] >= full_thr)]
         clusters = []
-        cur = [raw[0]]
-        for item in raw[1:]:
-            if item[0] - cur[-1][0] <= 10:
-                cur.append(item)
-            else:
-                clusters.append(cur)
-                cur = [item]
-        clusters.append(cur)
+        if sub:
+            cur = [sub[0]]
+            for item in sub[1:]:
+                if item[0] - cur[-1][0] <= 10:
+                    cur.append(item)
+                else:
+                    clusters.append(cur)
+                    cur = [item]
+            clusters.append(cur)
         result = []
         for c in clusters:
             if pick == "low":
@@ -829,16 +835,19 @@ def calc_signal_history(_df, ticker_key):
             else:
                 best = max(c, key=lambda x: x[2])
             result.append((best[1], best[2], best[3]))
+        # フル点灯を全て加えて日付順にソート
+        result.extend(full_days)
+        result.sort(key=lambda x: x[0])
         return result
 
-    bottom_days = clusterize(raw_bottom, pick="low")
-    top_days = clusterize(raw_top, pick="high")
+    bottom_days = clusterize(raw_bottom, pick="low", full_thr=10)
+    top_days = clusterize(raw_top, pick="high", full_thr=9)
     return bottom_days, top_days
 
 sig_bottoms, sig_tops = calc_signal_history(df, ticker)
 
 show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
-    help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼で表示")
+    help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼(フル点灯は💎⛔)で表示")
 show_hlines = st.checkbox("➖ 過去高値/安値の水平ラインを表示", value=False,
     help="意識されやすい過去の高値(赤)・安値(水色)に水平線を引く")
 show_legend = st.checkbox("🏷️ チャート上部の線の説明（凡例）を表示", value=False)
