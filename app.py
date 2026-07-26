@@ -305,6 +305,36 @@ def scan_full_history(days_back=365):
             continue
     events.sort(key=lambda e: e[0], reverse=True)
     return events
+# === モメンタムシグナル一覧（expander展開時のみ計算）===
+@st.cache_data(ttl=3600)
+def scan_momentum():
+    """全登録銘柄のモメンタム判定を集計。判定に必要なのは6ヶ月上昇率とMA200のみなので
+    2yデータで十分（maxと結果は完全同一・速度のみ向上）。
+    戻り値: (買いリスト, 売りリスト)。各要素=(label, ticker, 6ヶ月上昇率, is_held)"""
+    buys, sells = [], []
+    for label, tk in ALL_TICKERS:
+        if tk in ("^VIX", "^TNX"):
+            continue
+        try:
+            d = load_data(tk, "2y")
+            if d is None or len(d) < 200:
+                continue
+            c = d["close"]
+            ma200 = c.rolling(200).mean().iloc[-1]
+            price = c.iloc[-1]
+            if pd.isna(ma200) or len(c) < 127:
+                continue
+            ret_6m = (price - c.iloc[-127]) / c.iloc[-127] * 100
+            is_held = tk in HELD_TICKERS
+            if ret_6m >= 50 and price > ma200:
+                buys.append((label, tk, ret_6m, is_held))
+            elif price < ma200:
+                sells.append((label, tk, ret_6m, is_held))
+        except Exception:
+            continue
+    buys.sort(key=lambda x: -x[2])          # 上昇率の高い順
+    sells.sort(key=lambda x: (not x[3]))    # 保有を先頭に
+    return buys, sells
 
 # トレンドラインが効かない銘柄（暗号資産・高ボラ株）。これらはトレンド方向フィルター対象外
 TREND_EXCLUDE = {"COIN","MSTR","MARA","CLSK","RIOT","BTDR","SOXL","QS","SOFI"}
@@ -591,6 +621,28 @@ if alerts:
             st.warning(msg)
 elif not (full_bottom or full_top):
     st.success(f"✅ 本日のシグナルなし（{len(scan)}銘柄スキャン済み）")
+# === モメンタムシグナル一覧（折りたたみ・買い/売りの2枠）===
+with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜買い=6ヶ月+50%かつMA200上／売り=MA200割れ）"):
+    with st.spinner("モメンタム判定中..."):
+        mom_buys, mom_sells = scan_momentum()
+    st.markdown("#### 🚀 モメンタム買い点灯中")
+    if mom_buys:
+        for label, tk, r6, is_held in mom_buys:
+            hm = "【保有】" if is_held else ""
+            st.markdown(f"- {hm}**{label}**　6ヶ月 **{r6:+.0f}%**　（MA200上）")
+        st.caption("3銘柄分散・1銘柄約3万円で検討。買う買わないは都度判断。")
+    else:
+        st.caption("モメンタム買いの点灯はなしなのだ。")
+    st.markdown("#### 📉 モメンタム売り点灯中（MA200割れ＝トレンド終了）")
+    if mom_sells:
+        for label, tk, r6, is_held in mom_sells:
+            hm = "【保有】" if is_held else ""
+            if is_held:
+                st.error(f"{hm}**{label}**　6ヶ月 {r6:+.0f}%　→ モメンタム保有なら売り検討")
+            else:
+                st.markdown(f"- {label}　6ヶ月 {r6:+.0f}%")
+    else:
+        st.caption("モメンタム売りの点灯はなしなのだ。")
 
 # === フル点灯の履歴（折りたたみ・直近1年・保有銘柄を強調）===
 with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井9/9のみ）"):
