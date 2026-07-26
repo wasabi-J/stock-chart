@@ -37,6 +37,9 @@ GROUPS = {
         "SOFI（ソーファイ）": "SOFI",
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
+                "ESAB（溶接・切断機器）": "ESAB",
+        "TTD（トレードデスク・広告）": "TTD",
+
         "RIVN（リビアン・EV）": "RIVN",
         "OLED（ユニバーサルディスプレイ）": "OLED",
         "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
