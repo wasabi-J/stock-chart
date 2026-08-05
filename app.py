@@ -12,7 +12,6 @@ GROUPS = {
     "📁 保有中": {
         "COIN（コインベース）": "COIN",
         "MSTR（マイクロストラテジー）": "MSTR",
-        "TMF（米国債20年3倍）": "TMF",
         "1328（金ETF・日本）": "1328.T",
     },
     "📁 短期戦略": {
@@ -41,6 +40,8 @@ GROUPS = {
         "TTD（トレードデスク・広告）": "TTD",
         "RIVN（リビアン・EV）": "RIVN",
         "OLED（ユニバーサルディスプレイ）": "OLED",
+        "MP（MPマテリアルズ・レアアース）": "MP",
+        "TMF（米国債20年3倍・売却済→監視）": "TMF",
         "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
         "QS（クアンタムスケープ）🔬検証済:対象外": "QS",
         "XLE（エネルギーETF）": "XLE",
@@ -128,6 +129,41 @@ def load_data(ticker, period="5y"):
     else:
         df["turnover_ma20"] = np.nan
     return df
+
+# === PER・PBR取得（trailingPE優先＋株価÷EPSでクロスチェック）===
+# 注意：yfinanceの.infoは「現在時点のスナップショット」であり過去PERは取得できない。
+# 赤字銘柄はtrailingPEがNone/負になるためN/A扱いとし、PBRを併記して判断材料にする。
+@st.cache_data(ttl=3600)
+def get_per_pbr(ticker):
+    """PER・PBRを取得。
+    戻り値: (per, pbr, is_estimated) ※is_estimated=Trueは株価÷EPSの手計算フォールバック"""
+    try:
+        info = yf.Ticker(ticker).info
+        per = info.get("trailingPE")
+        pbr = info.get("priceToBook")
+        eps = info.get("trailingEps")
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        is_estimated = False
+        # trailingPEが欠損 or 異常値なら株価÷実績EPSで再計算
+        if (per is None or per <= 0) and eps and price and eps > 0:
+            per = price / eps
+            is_estimated = True
+        if per is not None and per <= 0:
+            per = None  # 赤字＝N/A扱い
+        return per, pbr, is_estimated
+    except Exception:
+        return None, None, False
+
+def calc_annual_vol(df):
+    """年率ボラティリティ(%)を計算。VIX30時の銘柄選定（45%以上を選ぶ）用。
+    直近252営業日の日次リターン標準偏差 × √252"""
+    try:
+        r = df["close"].pct_change().dropna()
+        if len(r) < 60:
+            return None
+        return float(r.iloc[-252:].std() * np.sqrt(252) * 100)
+    except Exception:
+        return None
 
 def check_liquidity(df, ticker):
     """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日。
@@ -402,6 +438,16 @@ def momentum_signal(ticker, period="max"):
     except Exception:
         return None
 
+def calc_ret_6m(df):
+    """6ヶ月（126営業日）上昇率。サマリー出力にモメンタムの実数を載せる用"""
+    try:
+        c = df["close"]
+        if len(c) < 127:
+            return None
+        return float((c.iloc[-1] - c.iloc[-127]) / c.iloc[-127] * 100)
+    except Exception:
+        return None
+
 # === (お) ダイバージェンス判定 ===
 # 強気ダイバージェンス＝株価は安値更新だがRSI(14)は切り上げ かつ RSI<45
 # 検証：月足=勝率79%（超強気の買い場サイン）、日足=勝率74%（補助）。週足は日足と大差なく不採用
@@ -518,9 +564,10 @@ if st.button("🔄 データ更新（最新の株価を取り直す）", use_con
 with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
-**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK/TMF)は1銘柄まで。半導体系(NVDA/SOXL)も1銘柄まで。
+**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
 **検証済(対象外)**: SOXL/QSは検証完了だが売買対象外。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視。QS=赤字構造でSTEP2弾き・買い筋はファンダ好材料のみ・VIX高は罠。
+**MP（レアアース）**: 通常より厳しい買い条件＝大底9＋月足トレンドup＋できればVIX25以上。月足downなら落ちるナイフ扱いで見送り。
 **ボーナス資金**: 指数9/10+の歴史的局面のみ。投信積立は不変、追加資金は暗号資産以外(XLE/EWZ/SLV/AMD等)優先。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
@@ -680,14 +727,24 @@ with col_g:
     group_name = st.radio("グループ", list(GROUPS.keys()))
 with col_t:
     ticker_name = st.radio("銘柄を選択", list(GROUPS[group_name].keys()))
-custom = st.text_input("直接入力（米国株:AAPL / 日本株:4桁数字でOK 例:7203）", "")
 
-_c = custom.strip()
+# === 直接入力＋✖️クリアボタン ===
+# 文字が残ると登録銘柄の選択を上書きし続けるため、ワンタップで消せるようにした
+col_in, col_x = st.columns([5,1])
+with col_in:
+    st.text_input("直接入力（米国株:AAPL / 日本株:4桁数字でOK 例:7203）", key="custom_ticker")
+with col_x:
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+    if st.button("✖️", key="clear_custom", help="入力をクリアして登録銘柄の表示に戻す"):
+        st.session_state["custom_ticker"] = ""
+        st.rerun()
+
+_c = st.session_state.get("custom_ticker", "").strip()
 ticker = (_c + ".T" if _c.isdigit() and len(_c) == 4 else _c.upper()) if _c else GROUPS[group_name][ticker_name]
 period = st.radio("データ期間（スコア計算用・5y推奨）", ["2y","5y","10y","max"], index=1, horizontal=True)
 
 if _c:
-    st.warning("⚠️ 直接入力銘柄は未検証です。スコアは参考表示のみとし、売買前に検証を依頼してください。")
+    st.warning("⚠️ 直接入力銘柄は未検証です。スコアは参考表示のみとし、売買前に検証を依頼してください。（✖️で入力をクリアすると登録銘柄に戻る）")
 with st.spinner("データ取得中..."):
     df = load_data(ticker, period)
 
@@ -711,6 +768,14 @@ c1.metric("現在値", f"{symbol}{float(latest['close']):,.2f}", f"{change:+,.2f
 c2.metric("日足RSI / 週足RSI", f"{float(latest['rsi']):.1f} / {float(latest['w_rsi']):.1f}" if pd.notna(latest['w_rsi']) else f"{float(latest['rsi']):.1f} / -")
 c3.metric("大底スコア", f"{bottom_score}/10")
 c4.metric("天井スコア", f"{top_score}/9")
+
+# === PER・PBR表示 ===
+# 赤字銘柄はPERがN/Aになるため、PBRを併記して判断材料にする（点灯記録ログの記法と統一）
+_per, _pbr, _per_est = get_per_pbr(ticker)
+_per_txt = (f"{_per:.1f}倍" + ("（株価÷EPS概算）" if _per_est else "")) if _per else "N/A（赤字 or 取得不可）"
+_pbr_txt = f"{_pbr:.2f}倍" if _pbr else "-"
+st.caption(f"📐 PER {_per_txt}　｜　PBR {_pbr_txt}　※現在値のスナップショット（過去PERは取得不可）")
+
 if w_score is not None:
     if w_score >= 5:
         st.caption(f"📅 週足スコア {w_score}/10（日足={bottom_score}）｜7-8=資金厚めの材料・9は満点警戒。日足シグナルの確認バッジ")
@@ -757,19 +822,25 @@ elif bottom_score == 8:
 elif bottom_score >= 6:
     st.info(f"📊 大底圏（{bottom_score}/10）：監視継続")
 
-# === トレンド方向フィルター（大底スコア8以上の時に表示）===
+# === トレンド方向フィルター（常時表示に変更・閾値撤廃）===
 # 検証：上昇トレンド中の大底はEV+34.8%・勝率47%（フィルター無し+19.7%より+15pt改善・前半後半とも成立=頑健）
 # 「大局は順張り（上昇トレンド）、エントリーは逆張り（大底）」が最強
+# 大底8以上のときは判断材料として大きく表示、それ未満でも地形把握のため常時caption表示する
+trend = monthly_trend_direction(ticker)
 if bottom_score >= 8:
-    trend = monthly_trend_direction(ticker)
     if trend == "up":
         st.success("📈 **月足トレンド：上昇中** → 上昇トレンド中の大底はEV+34.8%・勝率47%（最強の買い場）。資金を厚めに検討")
     elif trend == "down":
         st.warning("📉 **月足トレンド：下降中** → 下降トレンド中の大底はEV+12%と弱め。慎重に")
     elif trend == "range":
         st.info("➡️ **月足トレンド：レンジ（方向感なし）** → EV+16%と平凡。様子見も一案")
-    elif trend is None:
+    else:
         st.caption("ℹ️ この銘柄はトレンド方向フィルター対象外（暗号資産・高ボラ株はトレンドラインが効かないため）")
+else:
+    _tmap = {"up": "📈 月足トレンド：上昇中（大底点灯時は最強の買い場・EV+34.8%）",
+             "down": "📉 月足トレンド：下降中（大底が出ても弱め・EV+12%）",
+             "range": "➡️ 月足トレンド：レンジ（方向感なし・EV+16%）"}
+    st.caption(_tmap.get(trend, "ℹ️ 月足トレンド：対象外（暗号資産・高ボラ株はトレンドラインが効かない）"))
 
 if top_score >= 9:
     st.error(f"⛔🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
@@ -805,49 +876,8 @@ with st.expander("📋 スコア詳細（タップで開閉）", expanded=False)
         for label, ok, detail in top_checks:
             st.markdown(f"{'✅' if ok else '❌'} {label}　{detail}")
 
-tf = st.radio("チャート時間軸", ["日足","週足","月足"], index=0, horizontal=True)
-
-def make_chart_frame(df, tf):
-    if tf == "日足":
-        cd = pd.DataFrame({
-            "open": df["open"], "high": df["high"],
-            "low": df["low"], "close": df["close"],
-        })
-    else:
-        rule = "W-FRI" if tf == "週足" else "ME"
-        try:
-            o = df["open"].resample(rule).first()
-            h = df["high"].resample(rule).max()
-            lo = df["low"].resample(rule).min()
-            c = df["close"].resample(rule).last()
-        except ValueError:
-            rule = "W-FRI" if tf == "週足" else "M"
-            o = df["open"].resample(rule).first()
-            h = df["high"].resample(rule).max()
-            lo = df["low"].resample(rule).min()
-            c = df["close"].resample(rule).last()
-        cd = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
-    cd["sma25"] = cd["close"].rolling(25).mean()
-    cd["sma75"] = cd["close"].rolling(75).mean()
-    cd["sma200"] = cd["close"].rolling(200).mean()
-    delta = cd["close"].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    cd["rsi"] = 100 - (100/(1+gain/loss))
-    cd["bb_mid"] = cd["close"].rolling(20).mean()
-    s = cd["close"].rolling(20).std()
-    cd["bb_upper"] = cd["bb_mid"] + 2*s
-    cd["bb_lower"] = cd["bb_mid"] - 2*s
-    e12 = cd["close"].ewm(span=12).mean()
-    e26 = cd["close"].ewm(span=26).mean()
-    cd["macd"] = e12 - e26
-    cd["macd_signal"] = cd["macd"].ewm(span=9).mean()
-    cd["macd_hist"] = cd["macd"] - cd["macd_signal"]
-    return cd
-
-cframe = make_chart_frame(df, tf)
-
 # === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー。フル点灯は全て個別表示）===
+# ※コピー用サマリーでも点灯履歴を使うため、チャートより手前で計算しておく
 @st.cache_data(ttl=3600)
 def calc_signal_history(_df, ticker_key):
     raw_bottom = []
@@ -897,6 +927,124 @@ def calc_signal_history(_df, ticker_key):
     return bottom_days, top_days
 
 sig_bottoms, sig_tops = calc_signal_history(df, ticker)
+
+# === コピー用サマリー（Claude相談用・画面に出ている情報を全部入り）===
+with st.expander("📄 コピー用サマリー（Claude相談用・タップで開く）", expanded=False):
+    _vix_now = get_vix_level()
+    _ret6 = calc_ret_6m(df)
+    _avol = calc_annual_vol(df)
+
+    # ここぞ判定（個別銘柄版・check_strongestと同じロジック）
+    _conds = []
+    if _vix_now is not None and _vix_now >= 30:
+        _conds.append("VIX30")
+    if is_high_vol(ticker):
+        _conds.append("高ボラ")
+    if bottom_score >= 8 and len(_conds) >= 2:
+        _kokozo = f"🔥確定演出（{' + '.join(_conds)}）"
+    elif bottom_score >= 8 and len(_conds) == 1:
+        _kokozo = f"⭐ここぞ（{_conds[0]}のみ）"
+    else:
+        _kokozo = f"該当なし（成立条件: {'・'.join(_conds) if _conds else 'なし'}）"
+
+    # 週足スコアの帯
+    if w_score is None:
+        _wtxt = "算出不可"
+    elif w_score < 5:
+        _wtxt = f"{w_score}/10 💧足切り"
+    elif w_score >= 9:
+        _wtxt = f"{w_score}/10 ⚠️満点警戒"
+    elif w_score >= 7:
+        _wtxt = f"{w_score}/10 🎯最良帯"
+    else:
+        _wtxt = f"{w_score}/10"
+
+    _trend_txt = {"up": "上昇(up)", "down": "下降(down)", "range": "レンジ(range)"}.get(trend, "対象外(暗号資産・高ボラ)")
+    _mom_txt = {"buy": "🚀買い", "sell": "📉売り"}.get(_mom, "なし")
+    _mom_txt += f"（6ヶ月 {_ret6:+.1f}%）" if _ret6 is not None else ""
+
+    # 大底9以上の点灯履歴（検証4＝初点灯かの判定材料）
+    if sig_bottoms:
+        _b_dates = [d.strftime("%Y-%m-%d") for d, p, s in sig_bottoms]
+        _hist_txt = f"データ期間({period})内 {len(sig_bottoms)}回 / 最終 {_b_dates[-1]}"
+        _hist_txt += f" / 初回 {_b_dates[0]}"
+    else:
+        _hist_txt = f"データ期間({period})内 0回 ← 初点灯なら◎高信頼(的中率99%)"
+
+    if _to is not None:
+        _liq_disp = f"{_tsym}{_to/1e8:.1f}億/日" if _tsym == "¥" else f"{_tsym}{_to/1e6:.0f}百万/日"
+        _liq_disp += "（流動性OK）" if _liq else "（薄商い・ダマシ注意）"
+    else:
+        _liq_disp = "取得不可"
+
+    _summary = f"""【{ticker}】{df.index[-1].strftime('%Y-%m-%d')}
+株価: {symbol}{_p:,.2f}（{change:+,.2f} / {change_pct:+.2f}%）
+PER: {_per_txt} ｜ PBR: {_pbr_txt}
+--- スコア ---
+大底スコア: {bottom_score}/10
+天井スコア: {top_score}/9
+週足スコア: {_wtxt}
+月足トレンド: {_trend_txt}
+ダイバージェンス: 月足={'あり(勝率79%)' if _div['monthly'] else 'なし'} / 日足={'あり(勝率74%)' if _div['daily'] else 'なし'}
+モメンタム: {_mom_txt}
+ここぞ判定: {_kokozo}
+VIX: {f'{_vix_now:.1f}' if _vix_now is not None else '取得不可'}
+--- 補助指標 ---
+MA200乖離: {f"{latest['ma200_dev']:+.1f}%" if pd.notna(latest['ma200_dev']) else '-'}
+下落深度(52週高値から): {latest['drawdown_pct']:.1f}%
+高値からの経過: {int(latest['days_from_high'])}日
+52週安値から: {latest['rally_pct']:+.1f}%{' ← 新安値更新中' if latest['rally_pct'] <= 5 else ''}
+年率ボラ: {f'{_avol:.1f}%' if _avol is not None else '-'}{'（VIX30時の適格ライン45%以上）' if _avol is not None and _avol >= 45 else ''}
+売買代金(20日平均): {_liq_disp}
+大底9以上の点灯履歴: {_hist_txt}
+--- ライン ---
+SL-15%: {symbol}{_p*0.85:,.2f}
++50%: {symbol}{_p*1.5:,.2f} / +100%: {symbol}{_p*2:,.2f} / +300%: {symbol}{_p*4:,.2f} / +500%: {symbol}{_p*6:,.2f}"""
+
+    st.code(_summary, language=None)
+    st.caption("右上のコピーアイコンで全文コピーできるのだ。そのままClaudeに貼れば相談が一発なのだ。")
+
+tf = st.radio("チャート時間軸", ["日足","週足","月足"], index=0, horizontal=True)
+
+def make_chart_frame(df, tf):
+    if tf == "日足":
+        cd = pd.DataFrame({
+            "open": df["open"], "high": df["high"],
+            "low": df["low"], "close": df["close"],
+        })
+    else:
+        rule = "W-FRI" if tf == "週足" else "ME"
+        try:
+            o = df["open"].resample(rule).first()
+            h = df["high"].resample(rule).max()
+            lo = df["low"].resample(rule).min()
+            c = df["close"].resample(rule).last()
+        except ValueError:
+            rule = "W-FRI" if tf == "週足" else "M"
+            o = df["open"].resample(rule).first()
+            h = df["high"].resample(rule).max()
+            lo = df["low"].resample(rule).min()
+            c = df["close"].resample(rule).last()
+        cd = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
+    cd["sma25"] = cd["close"].rolling(25).mean()
+    cd["sma75"] = cd["close"].rolling(75).mean()
+    cd["sma200"] = cd["close"].rolling(200).mean()
+    delta = cd["close"].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    cd["rsi"] = 100 - (100/(1+gain/loss))
+    cd["bb_mid"] = cd["close"].rolling(20).mean()
+    s = cd["close"].rolling(20).std()
+    cd["bb_upper"] = cd["bb_mid"] + 2*s
+    cd["bb_lower"] = cd["bb_mid"] - 2*s
+    e12 = cd["close"].ewm(span=12).mean()
+    e26 = cd["close"].ewm(span=26).mean()
+    cd["macd"] = e12 - e26
+    cd["macd_signal"] = cd["macd"].ewm(span=9).mean()
+    cd["macd_hist"] = cd["macd"] - cd["macd_signal"]
+    return cd
+
+cframe = make_chart_frame(df, tf)
 
 show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
     help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼(フル点灯は💎⛔)で表示")
