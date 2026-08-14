@@ -27,6 +27,7 @@ GROUPS = {
         "BABA（アリババ・売却済→監視）": "BABA",
         "7325（アイリック・見送り→監視）": "7325.T",
         "3549（クスリのアオキ・優待）": "3549.T",
+        "8136（サンリオ・優待バケット）": "8136.T",
         "MARA（マラソンデジタル）": "MARA",
         "CLSK（クリーンスパーク）": "CLSK",
         "NVDA（エヌビディア）": "NVDA",
@@ -47,6 +48,34 @@ GROUPS = {
         "QS（クアンタムスケープ）🔬検証済:対象外": "QS",
         "XLE（エネルギーETF）": "XLE",
         "EC（エコペトロール・売却済）": "EC",
+        # --- 2026-08-15 週次スクリーニングv2 審査通過（米国株14）---
+        "ACM（エーコム・建設エンジ）🆕": "ACM",
+        "AMTM（アメンタム・政府サービス）🆕": "AMTM",
+        "APTV（アプティブ・自動車部品）🆕": "APTV",
+        "CPRI（カプリHD・ヴェルサーチ等）🆕": "CPRI",
+        "INTR（インテル&Co・ブラジル銀行）🆕": "INTR",
+        "LVS（ラスベガス・サンズ）🆕": "LVS",
+        "MMS（マキシマス・政府BPO）🆕": "MMS",
+        "NKE（ナイキ）🆕": "NKE",
+        "ONON（オン・スニーカー）🆕": "ONON",
+        "PFSI（ペニーマック・住宅ローン）🆕": "PFSI",
+        "POST（ポストHD・シリアル）🆕": "POST",
+        "PPC（ピルグリムズプライド・鶏肉）🆕": "PPC",
+        "SGI（ソムニグループ・マットレス）🆕": "SGI",
+        "ZTS（ゾエティス・動物用医薬）🆕": "ZTS",
+        # --- 2026-08-15 週次スクリーニングv2 審査通過（日本株12）---
+        "2216（カンロ・製菓）🆕": "2216.T",
+        "3692（FFRIセキュリティ）🆕": "3692.T",
+        "3836（アバントグループ）🆕": "3836.T",
+        "3905（データセクション）🆕": "3905.T",
+        "4569（キョーリン製薬HD）🆕": "4569.T",
+        "5214（日本電気硝子）🆕": "5214.T",
+        "6787（メイコー・プリント基板）🆕": "6787.T",
+        "7003（三井E&S）🆕": "7003.T",
+        "7157（ライフネット生命）🆕": "7157.T",
+        "7649（スギホールディングス）🆕": "7649.T",
+        "7760（IMV・振動試験装置）🆕": "7760.T",
+        "9024（西武ホールディングス）🆕": "9024.T",
     },
     "📁 指数・コモディティ": {
         "BTC（ビットコイン）": "BTC-USD",
@@ -65,6 +94,14 @@ ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
 
 # 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
 HELD_TICKERS = set(GROUPS["📁 保有中"].values())
+
+# === モメンタム柱で保有中の銘柄（出口ステータスの常時表示用）===
+# 出口は「日足MA200割れで即売り」これのみ。利確ラインなし。
+# MA200は日々動くので損切りラインは固定せず毎回この表示で更新して確認する。
+# 銘柄を売ったらこの辞書から外す。買ったら {ティッカー: "表示名"} を追加する。
+MOMENTUM_HELD = {
+    "6963.T": "6963 ローム",
+}
 
 @st.cache_data(ttl=3600)
 def load_data(ticker, period="5y"):
@@ -439,6 +476,27 @@ def momentum_signal(ticker, period="max"):
     except Exception:
         return None
 
+@st.cache_data(ttl=3600)
+def momentum_exit_status(ticker):
+    """モメンタム柱の保有銘柄について、出口(日足MA200割れ)までの距離を算出。
+    戻り値: dict{price, ma200, dev(乖離率%), dist(損切りまで何%下がるか), date} / None
+    ※MA200は日々動くため損切りラインは固定せず、この表示で毎回更新して確認する。"""
+    try:
+        d = load_data(ticker, "2y")
+        if d is None or len(d) < 200:
+            return None
+        c = d["close"]
+        ma200 = c.rolling(200).mean().iloc[-1]
+        price = c.iloc[-1]
+        if pd.isna(ma200) or ma200 == 0:
+            return None
+        dev = (price - ma200) / ma200 * 100      # MA200からの乖離率
+        dist = (ma200 - price) / price * 100     # 現在値から損切りまでの下落幅
+        return {"price": float(price), "ma200": float(ma200),
+                "dev": float(dev), "dist": float(dist), "date": d.index[-1]}
+    except Exception:
+        return None
+
 def calc_ret_6m(df):
     """6ヶ月（126営業日）上昇率。サマリー出力にモメンタムの実数を載せる用"""
     try:
@@ -569,6 +627,9 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
 **検証済(対象外)**: SOXL/QSは検証完了だが売買対象外。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視。QS=赤字構造でSTEP2弾き・買い筋はファンダ好材料のみ・VIX高は罠。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋月足トレンドup＋できればVIX25以上。月足downなら落ちるナイフ扱いで見送り。
+**優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
+**モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
+**🆕銘柄**: 2026-08-15の週次スクリーニング通過組。プール入場審査は通過済みだが実弾は点灯待ち。
 **ボーナス資金**: 指数9/10+の歴史的局面のみ。投信積立は不変、追加資金は暗号資産以外(XLE/EWZ/SLV/AMD等)優先。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
@@ -609,6 +670,33 @@ if case_a or case_b:
     st.markdown("".join(parts), unsafe_allow_html=True)
     if case_a:
         st.toast("🔥 確定演出！買い場確定！", icon="🔥")
+    st.divider()
+
+# === モメンタム柱の出口ステータス（常時表示）===
+# 出口はMA200割れで即売り、これのみ。利確ラインなし。
+# MA200は日々動くので損切りラインは固定せず、ここで毎回更新して確認する。
+# 監視頻度＝乖離が大きいうちは週次、MA200に近づいたら日次に切り替える二段構え。
+if MOMENTUM_HELD:
+    st.markdown("<div style='font-size:0.85em;font-weight:700;margin:2px 0;'>🚀 モメンタム柱の出口ステータス（出口はMA200割れのみ）</div>", unsafe_allow_html=True)
+    for _mtk, _mname in MOMENTUM_HELD.items():
+        _ms = momentum_exit_status(_mtk)
+        if _ms is None:
+            st.warning(f"{_mname}：データ取得に失敗したのだ（次の更新で再取得される）")
+            continue
+        _msym = "¥" if (".T" in _mtk or _mtk.startswith("^N")) else "$"
+        _mc = st.columns(4)
+        _mc[0].metric(f"{_mname} 現在値", f"{_msym}{_ms['price']:,.0f}")
+        _mc[1].metric("日足MA200（損切りライン）", f"{_msym}{_ms['ma200']:,.0f}")
+        _mc[2].metric("MA200乖離率", f"{_ms['dev']:+.1f}%")
+        _mc[3].metric("損切りまで", f"{_ms['dist']:+.1f}%")
+        if _ms["dev"] < 0:
+            st.error(f"🚨 **{_mname}：MA200を割れた（乖離{_ms['dev']:+.1f}%）→ 出口条件成立。即売りを執行するのだ**")
+        elif _ms["dev"] < 10:
+            st.warning(f"⚠️ {_mname}：MA200まであと{_ms['dist']:.1f}%＝接近中。**監視を日次に切り替え**るのだ")
+        elif _ms["dev"] < 20:
+            st.info(f"📊 {_mname}：MA200まであと{_ms['dist']:.1f}%。そろそろ日次監視への切り替えを意識するのだ")
+        else:
+            st.caption(f"✅ {_mname}：乖離{_ms['dev']:+.1f}%と余裕あり＝**週次監視で十分**なのだ（データ最終日 {_ms['date'].strftime('%Y-%m-%d')}）")
     st.divider()
 
 # === フル点灯チェック（最上段の特大警告用）===
