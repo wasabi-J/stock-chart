@@ -611,6 +611,69 @@ def check_strongest(scan):
             case_b.append((label, tk, bs, is_held, conds))
     return case_a, case_b
 
+# === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
+# 母集団70銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
+# 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
+def _count_bottom9_clusters(d):
+    """その銘柄で大底9以上が過去に何回点灯したかを数える（10営業日以内の連続は1回に集約）。
+    検証4「その銘柄で初の大底9か」の自動判定に使う。"""
+    raw = []
+    for idx in range(260, len(d)):
+        bs, _ = calc_bottom_score(d.iloc[idx])
+        if bs >= 9:
+            raw.append(idx)
+    if not raw:
+        return 0
+    clusters = 1
+    for a, b in zip(raw, raw[1:]):
+        if b - a > 10:
+            clusters += 1
+    return clusters
+
+@st.cache_data(ttl=3600)
+def bulk_signal_row(ticker, period="5y"):
+    """一括出力テーブル1行分のデータをまとめて取得する。
+    戻り値: dict / None（データ不足）"""
+    try:
+        d = load_data(ticker, period)
+        if d is None:
+            return None
+        r = d.iloc[-1]
+        bs, _ = calc_bottom_score(r)
+        ts, _ = calc_top_score(r)
+        ws, _ = calc_weekly_bottom_score(d)
+        per, pbr, per_est = get_per_pbr(ticker)
+        trend = monthly_trend_direction(ticker)
+        div = divergence_signals(ticker)
+        to, liq, tsym = check_liquidity(d, ticker)
+        n9 = _count_bottom9_clusters(d)
+        return {
+            "date": d.index[-1].strftime("%Y-%m-%d"),
+            "price": float(r["close"]), "sym": tsym or ("¥" if ".T" in ticker else "$"),
+            "bs": bs, "ts": ts, "ws": ws,
+            "per": per, "pbr": pbr, "per_est": per_est,
+            "trend": trend, "div_m": div["monthly"], "div_d": div["daily"],
+            "dd": float(r["drawdown_pct"]), "dev": float(r["ma200_dev"]) if pd.notna(r["ma200_dev"]) else None,
+            "rally": float(r["rally_pct"]), "dfh": int(r["days_from_high"]),
+            "avol": calc_annual_vol(d), "ret6": calc_ret_6m(d),
+            "to": to, "liq": liq,
+            "n9": n9, "highvol": is_high_vol(ticker),
+        }
+    except Exception:
+        return None
+
+def _fmt_ws(ws):
+    """週足スコアを帯の意味つきで文字列化（<5💧足切り／7-8🎯最良帯／9⚠️満点警戒）"""
+    if ws is None:
+        return "-"
+    if ws < 5:
+        return f"{ws}💧"
+    if ws >= 9:
+        return f"{ws}⚠️"
+    if ws >= 7:
+        return f"{ws}🎯"
+    return str(ws)
+
 st.title("📈 大底・天井スコア")
 st.caption("大底10条件・天井9条件 | 買い:スコア9+ 売り:天井8+")
 
@@ -757,6 +820,111 @@ if alerts:
             st.warning(msg)
 elif not (full_bottom or full_top):
     st.success(f"✅ 本日のシグナルなし（{len(scan)}銘柄スキャン済み）")
+
+# === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
+# 一斉点灯時に1銘柄ずつ相談すると往復が増えるため、選んだ銘柄をまとめて表に出す。
+# 「分析済み」チェックはセッション内のみ（リロードで消える＝永続化しない仕様）。
+_lit = [(lb, tk, bs, ts) for lb, tk, bs, ts in scan
+        if bs >= 8 and tk not in ("^VIX", "^TNX")]
+_lit.sort(key=lambda x: -x[2])  # 大底スコア降順
+
+with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}銘柄・タップで開く）"):
+    if not _lit:
+        st.caption("大底8以上の点灯はなしなのだ。凪の日は出番なしで正常なのだ。")
+    else:
+        _thr = st.radio("対象ライン", ["大底8以上（ゾーン込み）", "大底9以上（買いラインのみ）"],
+                        index=0, horizontal=True, key="bulk_thr")
+        _min_bs = 9 if _thr.startswith("大底9") else 8
+        _target = [x for x in _lit if x[2] >= _min_bs]
+
+        if not _target:
+            st.caption("この条件に該当する銘柄はないのだ。")
+        else:
+            _opts = [f"{lb.split('（')[0].strip()}（大底{bs}）" for lb, tk, bs, ts in _target]
+            _map = {o: t for o, t in zip(_opts, _target)}
+            _sel = st.multiselect("出力する銘柄（デフォルト全選択）", _opts, default=_opts, key="bulk_sel")
+
+            st.caption("✅ 分析済みチェック（相談が済んだ銘柄に印をつける。リロードで消えるのだ）")
+            _dcols = st.columns(min(3, max(1, len(_target))))
+            for _i, (lb, tk, bs, ts) in enumerate(_target):
+                with _dcols[_i % len(_dcols)]:
+                    st.checkbox(lb.split("（")[0].strip(), key=f"bulk_done_{tk}")
+
+            _mode = st.radio("出力フォーマット",
+                             ["短縮版（PER点灯記録ログ用）", "全項目版（判断材料フル）"],
+                             index=0, horizontal=True, key="bulk_mode")
+
+            if st.button("📝 テーブルを生成", use_container_width=True, key="bulk_go"):
+                st.session_state["bulk_ready"] = True
+
+            if st.session_state.get("bulk_ready"):
+                _picked = [_map[o] for o in _sel if o in _map]
+                if not _picked:
+                    st.caption("銘柄が選ばれていないのだ。")
+                else:
+                    _vix_v = get_vix_level()
+                    _vix_s = f"{_vix_v:.1f}" if _vix_v is not None else "-"
+                    _rows = []
+                    with st.spinner(f"{len(_picked)}銘柄を集計中（初回は1銘柄あたり数秒かかるのだ）..."):
+                        for lb, tk, bs, ts in _picked:
+                            _r = bulk_signal_row(tk)
+                            if _r is None:
+                                continue
+                            _r["label"] = lb.split("（")[0].strip()
+                            _r["done"] = "✅" if st.session_state.get(f"bulk_done_{tk}") else ""
+                            _rows.append(_r)
+
+                    if not _rows:
+                        st.warning("データ取得に失敗したのだ。🔄データ更新を押して再試行してほしいのだ。")
+                    else:
+                        # PERとPBRの共通整形
+                        def _pf(r):
+                            if r["per"] is None:
+                                return "N/A(赤字)"
+                            return f"{r['per']:.1f}倍" + ("*" if r["per_est"] else "")
+                        def _bf(r):
+                            return f"{r['pbr']:.2f}倍" if r["pbr"] else "-"
+                        # 検証4の自動判定（今回の点灯を含めて1回目なら初点灯）
+                        def _v4(r):
+                            if r["bs"] >= 9 and r["n9"] <= 1:
+                                return "◎初点灯"
+                            if r["bs"] >= 9:
+                                return f"✕消化済({r['n9']}回目)"
+                            return "-(大底8)"
+                        _tmap = {"up": "up📈", "down": "down📉", "range": "range➡️"}
+
+                        if _mode.startswith("短縮版"):
+                            _h = "| 日付 | 銘柄 | シグナル | 週足 | 検証4 | PER | PBR | VIX | 判断 | 結果 |"
+                            _s = "|---|---|---|---|---|---|---|---|---|---|"
+                            _body = [
+                                f"| {r['date']} | {r['label']}{r['done']} | 大底{r['bs']}"
+                                f"{'💎フル' if r['bs'] >= 10 else ''} | {_fmt_ws(r['ws'])} | {_v4(r)} | "
+                                f"{_pf(r)} | {_bf(r)} | {_vix_s} |  |  |"
+                                for r in _rows
+                            ]
+                            _note = "※そのままPER点灯記録ログに貼れるのだ（判断・結果の欄は相談後に埋めるのだ）。PERの*は株価÷EPSの概算なのだ。"
+                        else:
+                            _h = ("| 銘柄 | 大底 | 天井 | 週足 | 月足 | ダイバ月/日 | PER | PBR | 深度 | "
+                                  "MA200乖離 | 年率ボラ | 6ヶ月 | 流動性 | 検証4 | VIX |")
+                            _s = "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+                            _body = []
+                            for r in _rows:
+                                _liq_m = "OK" if r["liq"] else "薄💧"
+                                _dev_s = f"{r['dev']:+.1f}%" if r["dev"] is not None else "-"
+                                _av_s = f"{r['avol']:.0f}%" if r["avol"] is not None else "-"
+                                _r6_s = f"{r['ret6']:+.0f}%" if r["ret6"] is not None else "-"
+                                _dv = ("有" if r["div_m"] else "無") + "/" + ("有" if r["div_d"] else "無")
+                                _body.append(
+                                    f"| {r['label']}{r['done']} | {r['bs']}{'💎' if r['bs'] >= 10 else ''} | "
+                                    f"{r['ts']} | {_fmt_ws(r['ws'])} | {_tmap.get(r['trend'], '対象外')} | {_dv} | "
+                                    f"{_pf(r)} | {_bf(r)} | {r['dd']:.1f}% | {_dev_s} | {_av_s} | {_r6_s} | "
+                                    f"{_liq_m} | {_v4(r)} | {_vix_s} |"
+                                )
+                            _note = ("※深度は-70〜-50%が最良帯・-50〜-30%が最弱帯。年率ボラ45%以上がVIX30弾の適格ライン。"
+                                     "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。")
+
+                        st.code("\n".join([_h, _s] + _body), language=None)
+                        st.caption(_note)
 # === モメンタムシグナル一覧（折りたたみ・買い/売りの2枠）===
 with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜買い=6ヶ月+50%かつMA200上／売り=MA200割れ）"):
     with st.spinner("モメンタム判定中..."):
