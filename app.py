@@ -46,6 +46,7 @@ GROUPS = {
         "TMF（米国債20年3倍・売却済→監視）": "TMF",
         "SOXL（半導体3倍）🔬検証済:対象外": "SOXL",
         "QS（クアンタムスケープ）🔬検証済:対象外": "QS",
+        "TSLL（TSLA2倍ブル）🔬システム外": "TSLL",
         "XLE（エネルギーETF）": "XLE",
         "EC（エコペトロール・売却済）": "EC",
         # --- 2026-08-15 週次スクリーニングv2 審査通過（米国株14）---
@@ -90,7 +91,28 @@ GROUPS = {
         "VIX（恐怖指数）": "^VIX",
     },
 }
+# === 銘柄の並び順を自動整列（米国株=ティッカーのアルファベット順 → 日本株=証券コードの昇順）===
+# 手作業で並べ替えると銘柄追加のたびに崩れるため、辞書は追加順のまま持ち、ここで機械的に並べ直す。
+# 指数・コモディティは意味のある並び（株価指数→金利→商品）なのでソート対象外にする。
+_NO_SORT_GROUPS = {"📁 指数・コモディティ"}
+
+def _name_sort_key(ticker):
+    """米国株を先(0)、日本株を後(1)に置き、米国はティッカー順・日本は証券コードの数値順にする"""
+    if ticker.endswith(".T"):
+        code = ticker[:-2]
+        return (1, int(code) if code.isdigit() else 0, ticker)
+    return (0, 0, ticker)
+
+for _gname in list(GROUPS.keys()):
+    if _gname in _NO_SORT_GROUPS:
+        continue
+    GROUPS[_gname] = dict(sorted(GROUPS[_gname].items(), key=lambda kv: _name_sort_key(kv[1])))
+
 ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
+
+# 🔬対象外＝スコアが点いても買い判断に使わない銘柄。バケットの件数から除外する
+# （件数が水増しされると「今日は何件見るべきか」の体感が狂うため）。表示自体は参考枠で残す。
+EXCLUDED_TICKERS = {"SOXL", "QS", "TSLL"}
 
 # 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
 HELD_TICKERS = set(GROUPS["📁 保有中"].values())
@@ -587,29 +609,8 @@ def get_vix_level():
     except Exception:
         return None
 
-def check_strongest(scan):
-    """大底8以上の銘柄で最強条件を判定。検証結果(2026-06-24)に基づきVIX30+高ボラベース。
-    検証：2条件の正体は「VIX30+高ボラ」(173回EV+45%・暗号資産+84%)、月足ダイバはここぞ判定には不要
-    (VIX30+月足ダイバは0回・高ボラ+月足ダイバはVIX30無しで-9.8%)。
-    🔥確定演出=大底8+VIX30+高ボラ(両方)、⭐ここぞ=大底8+どちらか1つ。
-    戻り値: (case_a=確定演出リスト, case_b=ここぞリスト)。各要素=(label,tk,bs,is_held,揃った条件名リスト)"""
-    vix = get_vix_level()
-    vix30 = (vix is not None and vix >= 30)
-    case_a, case_b = [], []
-    for label, tk, bs, ts in scan:
-        if bs < 8 or tk in ("^VIX", "^TNX"):
-            continue
-        conds = []
-        if vix30:
-            conds.append("VIX30")
-        if is_high_vol(tk):
-            conds.append("高ボラ")
-        is_held = tk in HELD_TICKERS
-        if len(conds) >= 2:        # VIX30 + 高ボラ = 本物のここぞ
-            case_a.append((label, tk, bs, is_held, conds))
-        elif len(conds) == 1:      # どちらか片方
-            case_b.append((label, tk, bs, is_held, conds))
-    return case_a, case_b
+# ※旧check_strongest()はバケット表示への統合により廃止した。
+# 🔥確定演出の判定（大底8＋VIX30＋高ボラ）はバケット振り分けの中で直接行っている。
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
 # 母集団70銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
@@ -662,6 +663,22 @@ def bulk_signal_row(ticker, period="5y"):
     except Exception:
         return None
 
+@st.cache_data(ttl=3600)
+def bucket_row_info(ticker):
+    """バケット表示の1行に出す4項目（週足スコア・月足トレンド・年率ボラ）を取得。
+    判断を決めているのは実質この4つ（買いライン大底9・足切り週足5・決定打は月足・VIX30時はボラ45%以上）。
+    ※月足トレンドは5yデータで判定する（窓18ヶ月なので十分・maxを使うと二重ダウンロードになり遅い）"""
+    try:
+        d = load_data(ticker, "5y")
+        if d is None:
+            return {"ws": None, "trend": None, "avol": None}
+        ws, _ = calc_weekly_bottom_score(d)
+        return {"ws": ws,
+                "trend": monthly_trend_direction(ticker, "5y"),
+                "avol": calc_annual_vol(d)}
+    except Exception:
+        return {"ws": None, "trend": None, "avol": None}
+
 def _fmt_ws(ws):
     """週足スコアを帯の意味つきで文字列化（<5💧足切り／7-8🎯最良帯／9⚠️満点警戒）"""
     if ws is None:
@@ -688,7 +705,7 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
 **集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
-**検証済(対象外)**: SOXL/QSは検証完了だが売買対象外。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視。QS=赤字構造でSTEP2弾き・買い筋はファンダ好材料のみ・VIX高は罠。
+**検証済(対象外)**: SOXL/QS/TSLLは🔬対象外＝バケットの件数に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で大底スコアは一切使わず、登録目的は$7割れの検知のみ。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋月足トレンドup＋できればVIX25以上。月足downなら落ちるナイフ扱いで見送り。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
@@ -700,10 +717,11 @@ with st.expander("📖 運用ルール（必ず確認）"):
 with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
     scan = scan_all()
 
-# === 最上段：ここぞアラート（VIX30+高ボラ＝検証で最強の局面）===
-# 🔥確定演出=大底8+VIX30+高ボラ(両方・EV+45%/暗号資産+84%・歴史的暴落の底)、⭐ここぞ=大底8+片方
-# フォント=Mochiy Pop One(Google Fonts・丸字ポップ)。確定演出は迫力を残し小さめ、ここぞは相談を促す控えめ表示
-case_a, case_b = check_strongest(scan)
+# === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
+# 背景：母集団70銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
+# よって点灯を「一覧」でなく「スコア別の束」にした。点灯銘柄は該当バケットに自動で積まれるので
+# 枠を作る作業は不要（VIX30で30件来たら大底9の枠が伸びるだけ）。
+# 旧「ここぞアラート枠」と「通常点灯枠」で同じ銘柄を2箇所に出していた二重表示はこれで解消。
 _FONT_CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap');
 .kakutei-box{background:linear-gradient(135deg,#3a0a0a,#6e1010);border:1.5px solid #ff4040;
@@ -712,34 +730,130 @@ _FONT_CSS = """<style>
 .kakutei-ttl{font-size:17px;color:#fff;text-shadow:0 0 6px #ff4040;margin-bottom:3px;}
 .kakutei-bdy{font-size:12px;line-height:1.45;color:#ffd8d8;}
 .kakutei-ev{color:#ffd040;}
-.kokozo-box{background:#2c2607;border:1px solid #b89020;border-radius:7px;
- padding:7px 11px;margin-bottom:6px;font-family:'Mochiy Pop One',sans-serif;}
-.kokozo-ttl{font-size:13px;color:#e8d28a;margin-bottom:2px;}
-.kokozo-bdy{font-size:11px;line-height:1.4;color:#cabb80;}
 .held-tag{background:#1a4a2a;color:#5fe;font-size:10px;padding:0 5px;border-radius:3px;margin-right:4px;}
 </style>"""
-if case_a or case_b:
-    parts = [_FONT_CSS]
-    for label, tk, bs, is_held, conds in case_a:
-        hm = '<span class="held-tag">保有</span>' if is_held else ""
-        parts.append(f'<div class="kakutei-box"><div class="kakutei-ttl">🔥 確定演出：{hm}{label}</div>'
-            f'<div class="kakutei-bdy">VIX30＋高ボラが揃った（大底{bs}）→ 歴史的暴落の底。'
+
+_vix_now = get_vix_level()
+_vix30 = (_vix_now is not None and _vix_now >= 30)
+
+# --- バケットへの振り分け ---
+# 🔥確定演出（大底8＋VIX30＋高ボラの両方）は最上段の別枠に出し、バケットからは除外＝二重表示を防ぐ
+_kakutei = []
+_buckets = {10: [], 9: [], 8: []}
+_excluded_lit = []
+for _lb, _tk, _bs, _ts in scan:
+    if _bs < 8 or _tk in ("^VIX", "^TNX"):
+        continue
+    _short = _lb.split("（")[0].strip()
+    _conds = []
+    if _vix30:
+        _conds.append("VIX30")
+    if is_high_vol(_tk):
+        _conds.append("高ボラ")
+    _row = {"short": _short, "tk": _tk, "bs": _bs, "conds": _conds,
+            "held": _tk in HELD_TICKERS, "info": bucket_row_info(_tk)}
+    if _tk in EXCLUDED_TICKERS:
+        _excluded_lit.append(_row)
+        continue
+    if len(_conds) >= 2:
+        _kakutei.append(_row)
+        continue
+    _buckets[10 if _bs >= 10 else _bs].append(_row)
+
+# 並び順：各バケット内で週足スコア降順 → 同点は名前順（米国=アルファベット／日本=コード順）
+# 名前順を最優先にしない理由＝点灯枠の用途は「探す」でなく「どれを見るべきか」だから。
+# 同点を名前順にすると毎回同じ並びになり前日との見比べもしやすい。
+def _bucket_sort(rows):
+    return sorted(rows, key=lambda r: (-(r["info"]["ws"] if r["info"]["ws"] is not None else -1),
+                                       _name_sort_key(r["tk"])))
+
+_TREND_MARK = {"up": "up📈", "down": "down📉", "range": "range➡️"}
+
+def _render_row(r):
+    """1行＝銘柄／週足／月足／年率ボラ。⭐は独立アラートを廃止して行内バッジに格下げした。
+    理由＝VIX30が来ない限り⭐は実質「高ボラ単独」で点いており、これはただの属性だから。"""
+    i = r["info"]
+    ws = _fmt_ws(i["ws"])
+    tr = _TREND_MARK.get(i["trend"], "対象外")
+    av = f"{i['avol']:.0f}%" if i["avol"] is not None else "-"
+    tags = ""
+    if r["held"]:
+        tags += " `保有`"
+    if r["conds"]:
+        tags += f" `⭐{'/'.join(r['conds'])}`"
+    return f"- **{r['short']}**　週足 {ws}　月足 {tr}　ボラ {av}{tags}"
+
+# --- 🔥確定演出（常時最上段・別枠）---
+if _kakutei:
+    _parts = [_FONT_CSS]
+    for r in _bucket_sort(_kakutei):
+        hm = '<span class="held-tag">保有</span>' if r["held"] else ""
+        _parts.append(f'<div class="kakutei-box"><div class="kakutei-ttl">🔥 確定演出：{hm}{r["short"]}（大底{r["bs"]}）</div>'
+            f'<div class="kakutei-bdy">VIX30＋高ボラが揃った → 歴史的暴落の底。'
             f'<span class="kakutei-ev">検証EV+45%(暗号資産+84%)</span>。損切りライン決めて即行動を検討！</div></div>')
-    for label, tk, bs, is_held, conds in case_b:
-        hm = '<span class="held-tag">保有</span>' if is_held else ""
-        other = '高ボラ' if 'VIX30' in conds else 'VIX30'
-        parts.append(f'<div class="kokozo-box"><div class="kokozo-ttl">⭐ ここぞ：{hm}{label}</div>'
-            f'<div class="kokozo-bdy">大底{bs}＋{" ＋ ".join(conds)} → もう片方({other})も揃えば確定演出。相談して検討</div></div>')
-    st.markdown("".join(parts), unsafe_allow_html=True)
-    if case_a:
-        st.toast("🔥 確定演出！買い場確定！", icon="🔥")
-    st.divider()
+    st.markdown("".join(_parts), unsafe_allow_html=True)
+    st.toast("🔥 確定演出！買い場確定！", icon="🔥")
+    st.caption("※確定演出の銘柄は下のバケットからは除外して表示しているのだ（二重表示を防ぐため）")
+
+# --- スコア別バケット ---
+_n10, _n9, _n8 = len(_buckets[10]), len(_buckets[9]), len(_buckets[8])
+_vix_txt = f"VIX {_vix_now:.1f}" if _vix_now is not None else "VIX -"
+st.markdown(f"<div style='font-size:0.82em;font-weight:700;margin:4px 0;'>🚨 大底スコア別バケット（{_vix_txt}／{len(scan)}銘柄スキャン済み）</div>", unsafe_allow_html=True)
+
+if _n10 + _n9 + _n8 + len(_kakutei) == 0:
+    st.success("✅ 本日の点灯なし（大底8以上ゼロ）。凪の日は出番なしで正常運転なのだ")
+else:
+    # 💎大底10（満点）＝展開。※満点は大底9より-11ptなので「深いほど良い」ではない点に注意
+    if _n10:
+        with st.expander(f"💎 大底10（{_n10}件）", expanded=True):
+            for r in _bucket_sort(_buckets[10]):
+                st.markdown(_render_row(r))
+            st.caption("満点10は大底9より-11pt（💎の用途は視認性のみ）。買いラインはあくまで9なのだ")
+    # 🎯大底9（買いライン）＝展開
+    if _n9:
+        with st.expander(f"🎯 大底9（{_n9}件）＝買いライン", expanded=True):
+            for r in _bucket_sort(_buckets[9]):
+                st.markdown(_render_row(r))
+            st.caption("買いラインはここ。週足<5は足切り・月足downは決定打で見送り・VIX30時はボラ45%以上を取るのだ")
+    # 大底8（未達）＝折りたたみ
+    if _n8:
+        with st.expander(f"大底8（{_n8}件）＝買いライン未達", expanded=False):
+            for r in _bucket_sort(_buckets[8]):
+                st.markdown(_render_row(r))
+            st.caption("大底8は定義上まだ未達。週足スコアの改善追跡と再点灯候補の発掘に使うのだ")
+
+# --- 🔬対象外の点灯（件数には含めない参考枠）---
+if _excluded_lit:
+    with st.expander(f"🔬 対象外銘柄の点灯（参考・{len(_excluded_lit)}件）", expanded=False):
+        for r in _bucket_sort(_excluded_lit):
+            st.markdown(_render_row(r))
+        st.caption("SOXLはVIX≥25限定で検討可・QSとTSLLは買い判断に使わないのだ（TSLLは$7割れの検知用）")
+
+# --- ⛔天井シグナル（保有銘柄でのみ意味を持つ）---
+_tops = []
+for _lb, _tk, _bs, _ts in scan:
+    if _ts >= 7 and _tk not in ("^VIX", "^TNX"):
+        _tops.append((_lb.split("（")[0].strip(), _tk, _ts, _tk in HELD_TICKERS))
+if _tops:
+    _tops.sort(key=lambda x: (-x[2], _name_sort_key(x[1])))
+    _held_top = [t for t in _tops if t[3]]
+    with st.expander(f"⛔ 天井シグナル（{len(_tops)}件"
+                     + (f"・うち保有{len(_held_top)}件" if _held_top else "") + "）", expanded=bool(_held_top)):
+        for _s, _tk, _ts, _hd in _tops:
+            _mk = "⛔フル" if _ts >= 9 else ("🔴売り" if _ts == 8 else "⚠️警戒")
+            if _hd:
+                st.markdown(f"- **{_s}**　{_mk}（{_ts}/9）　`保有`")
+            else:
+                st.markdown(f"- {_s}　{_mk}（{_ts}/9）")
+        st.caption("天井のビタ当ては不可能(AUC0.549)で天井売りは早売り。モメンタム柱の出口はMA200割れのみ、"
+                   "逆張りは含み益＋天井の時だけ意味を持つのだ")
 
 # === モメンタム柱の出口ステータス（常時表示）===
 # 出口はMA200割れで即売り、これのみ。利確ラインなし。
 # MA200は日々動くので損切りラインは固定せず、ここで毎回更新して確認する。
 # 監視頻度＝乖離が大きいうちは週次、MA200に近づいたら日次に切り替える二段構え。
 if MOMENTUM_HELD:
+    st.divider()
     st.markdown("<div style='font-size:0.85em;font-weight:700;margin:2px 0;'>🚀 モメンタム柱の出口ステータス（出口はMA200割れのみ）</div>", unsafe_allow_html=True)
     for _mtk, _mname in MOMENTUM_HELD.items():
         _ms = momentum_exit_status(_mtk)
@@ -760,66 +874,6 @@ if MOMENTUM_HELD:
             st.info(f"📊 {_mname}：MA200まであと{_ms['dist']:.1f}%。そろそろ日次監視への切り替えを意識するのだ")
         else:
             st.caption(f"✅ {_mname}：乖離{_ms['dev']:+.1f}%と余裕あり＝**週次監視で十分**なのだ（データ最終日 {_ms['date'].strftime('%Y-%m-%d')}）")
-    st.divider()
-
-# === フル点灯チェック（最上段の特大警告用）===
-full_bottom = []  # (label, ticker, score, is_held)
-full_top = []
-for label, tk, bs, ts in scan:
-    if bs >= 10:
-        full_bottom.append((label, tk, bs, tk in HELD_TICKERS))
-    if ts >= 9:
-        full_top.append((label, tk, ts, tk in HELD_TICKERS))
-
-# 最上段：フル点灯の特大警告（保有銘柄は特に強調）
-if full_bottom or full_top:
-    has_held = any(h for *_, h in full_bottom) or any(h for *_, h in full_top)
-    if has_held:
-        st.markdown("# 🚨🚨 保有銘柄がフル点灯中 🚨🚨")
-    else:
-        st.markdown("# 🚨 フル点灯中 🚨")
-
-    def render_full(items, emoji, kind_label):
-        held = [x for x in items if x[3]]
-        others = [x for x in items if not x[3]]
-        for label, tk, score, is_held in held + others:
-            if is_held:
-                st.error(f"## {emoji}【保有】{label} {kind_label}（{score}点満点）→ 売買をClaudeに相談")
-            else:
-                st.error(f"### {emoji}{label} {kind_label}（{score}点満点）")
-
-    render_full(full_bottom, "💎", "大底フル点灯")
-    render_full(full_top, "⛔", "天井フル点灯")
-    st.divider()
-
-alerts = []
-for label, tk, bs, ts in scan:
-    # 短縮表示用に銘柄記号だけ抽出（"BABA（アリババ…）"→"BABA"）。日本株は.Tを除去
-    short = label.split("（")[0].strip()
-    if short == "" or short.startswith("📁"):
-        short = tk.replace(".T", "")
-    vix_b = "（VIX底=楽観・天井警戒）" if tk == "^VIX" else ""
-    vix_t = "（VIX天井=恐怖最大=買い場）" if tk == "^VIX" else ""
-    # フル点灯は上で特大表示済みなので、ここではフル未満を従来通り表示
-    if bs == 9:
-        alerts.append(("error", f"🟢{short}買い{bs}{vix_b}"))
-    elif bs == 8:
-        alerts.append(("warning", f"⚠️{short}買いゾーン{bs}{vix_b}"))
-    if ts == 8:
-        alerts.append(("error", f"🔴{short}売り{ts}{vix_t}"))
-    elif ts == 7:
-        alerts.append(("warning", f"⚠️{short}天井警戒{ts}{vix_t}"))
-
-if alerts:
-    # 見出しを0.8倍に縮小（iPhoneで2行→1行に収める）
-    st.markdown("<div style='font-size:0.8em;font-weight:700;margin:4px 0;'>🚨 シグナル点灯中（フル未満）</div>", unsafe_allow_html=True)
-    for kind, msg in alerts:
-        if kind == "error":
-            st.error(msg)
-        else:
-            st.warning(msg)
-elif not (full_bottom or full_top):
-    st.success(f"✅ 本日のシグナルなし（{len(scan)}銘柄スキャン済み）")
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
 # 一斉点灯時に1銘柄ずつ相談すると往復が増えるため、選んだ銘柄をまとめて表に出す。
@@ -832,99 +886,116 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
     if not _lit:
         st.caption("大底8以上の点灯はなしなのだ。凪の日は出番なしで正常なのだ。")
     else:
-        _thr = st.radio("対象ライン", ["大底8以上（ゾーン込み）", "大底9以上（買いラインのみ）"],
-                        index=0, horizontal=True, key="bulk_thr")
-        _min_bs = 9 if _thr.startswith("大底9") else 8
-        _target = [x for x in _lit if x[2] >= _min_bs]
+        _opts = [f"{lb.split('（')[0].strip()}（大底{bs}）" for lb, tk, bs, ts in _lit]
+        _map = {o: t for o, t in zip(_opts, _lit)}
+        # デフォルトは【大底9以上】＝買いラインに達したものだけ。
+        # 大底8は定義上まだ未達（8/14〜17の22件中19件が大底8の自動見送りだった）。
+        _def = [o for o, (lb, tk, bs, ts) in zip(_opts, _lit) if bs >= 9]
 
-        if not _target:
-            st.caption("この条件に該当する銘柄はないのだ。")
-        else:
-            _opts = [f"{lb.split('（')[0].strip()}（大底{bs}）" for lb, tk, bs, ts in _target]
-            _map = {o: t for o, t in zip(_opts, _target)}
-            _sel = st.multiselect("出力する銘柄（デフォルト全選択）", _opts, default=_opts, key="bulk_sel")
+        if "bulk_sel" not in st.session_state:
+            st.session_state["bulk_sel"] = _def
 
-            st.caption("✅ 分析済みチェック（相談が済んだ銘柄に印をつける。リロードで消えるのだ）")
-            _dcols = st.columns(min(3, max(1, len(_target))))
-            for _i, (lb, tk, bs, ts) in enumerate(_target):
-                with _dcols[_i % len(_dcols)]:
-                    st.checkbox(lb.split("（")[0].strip(), key=f"bulk_done_{tk}")
+        def _sel_all():
+            st.session_state["bulk_sel"] = _opts
 
-            _mode = st.radio("出力フォーマット",
-                             ["短縮版（PER点灯記録ログ用）", "全項目版（判断材料フル）"],
-                             index=0, horizontal=True, key="bulk_mode")
+        def _sel_nine():
+            st.session_state["bulk_sel"] = _def
 
-            if st.button("📝 テーブルを生成", use_container_width=True, key="bulk_go"):
-                st.session_state["bulk_ready"] = True
+        _bc1, _bc2 = st.columns(2)
+        with _bc1:
+            st.button("全選択（大底8も含む）", use_container_width=True,
+                      key="bulk_all", on_click=_sel_all,
+                      help="週次ルーチン用。週足スコアの改善追跡やINTR/ZTS型の再点灯候補の発掘に使うのだ")
+        with _bc2:
+            st.button("大底9以上のみ", use_container_width=True,
+                      key="bulk_nine", on_click=_sel_nine,
+                      help="買いラインに達したものだけに戻すのだ")
 
-            if st.session_state.get("bulk_ready"):
-                _picked = [_map[o] for o in _sel if o in _map]
-                if not _picked:
-                    st.caption("銘柄が選ばれていないのだ。")
+        _sel = st.multiselect("出力する銘柄（デフォルト＝大底9以上）", _opts, key="bulk_sel")
+
+        st.caption("✅ 分析済みチェック（相談が済んだ銘柄に印をつける。リロードで消えるのだ）")
+        _dcols = st.columns(min(3, max(1, len(_lit))))
+        for _i, (lb, tk, bs, ts) in enumerate(_lit):
+            with _dcols[_i % len(_dcols)]:
+                st.checkbox(lb.split("（")[0].strip(), key=f"bulk_done_{tk}")
+
+        _mode = st.radio("出力フォーマット",
+                         ["短縮版（PER点灯記録ログ用）", "全項目版（判断材料フル）"],
+                         index=0, horizontal=True, key="bulk_mode")
+
+        if st.button("📝 テーブルを生成", use_container_width=True, key="bulk_go"):
+            st.session_state["bulk_ready"] = True
+
+        if st.session_state.get("bulk_ready"):
+            _picked = [_map[o] for o in _sel if o in _map]
+            if not _picked:
+                st.caption("銘柄が選ばれていないのだ。")
+            else:
+                _vix_s = f"{_vix_now:.1f}" if _vix_now is not None else "-"
+                _rows = []
+                with st.spinner(f"{len(_picked)}銘柄を集計中（初回は1銘柄あたり数秒かかるのだ）..."):
+                    for lb, tk, bs, ts in _picked:
+                        _r = bulk_signal_row(tk)
+                        if _r is None:
+                            continue
+                        _r["label"] = lb.split("（")[0].strip()
+                        _r["done"] = "✅" if st.session_state.get(f"bulk_done_{tk}") else ""
+                        _rows.append(_r)
+
+                if not _rows:
+                    st.warning("データ取得に失敗したのだ。🔄データ更新を押して再試行してほしいのだ。")
                 else:
-                    _vix_v = get_vix_level()
-                    _vix_s = f"{_vix_v:.1f}" if _vix_v is not None else "-"
-                    _rows = []
-                    with st.spinner(f"{len(_picked)}銘柄を集計中（初回は1銘柄あたり数秒かかるのだ）..."):
-                        for lb, tk, bs, ts in _picked:
-                            _r = bulk_signal_row(tk)
-                            if _r is None:
-                                continue
-                            _r["label"] = lb.split("（")[0].strip()
-                            _r["done"] = "✅" if st.session_state.get(f"bulk_done_{tk}") else ""
-                            _rows.append(_r)
+                    # PERとPBRの共通整形
+                    def _pf(r):
+                        if r["per"] is None:
+                            return "N/A(赤字)"
+                        return f"{r['per']:.1f}倍" + ("*" if r["per_est"] else "")
+                    def _bf(r):
+                        return f"{r['pbr']:.2f}倍" if r["pbr"] else "-"
+                    # 検証4の自動判定（今回の点灯を含めて1回目なら初点灯）
+                    def _v4(r):
+                        if r["bs"] >= 9 and r["n9"] <= 1:
+                            return "◎初点灯"
+                        if r["bs"] >= 9:
+                            return f"✕消化済({r['n9']}回目)"
+                        return "-(大底8)"
+                    _tmap = {"up": "up📈", "down": "down📉", "range": "range➡️"}
 
-                    if not _rows:
-                        st.warning("データ取得に失敗したのだ。🔄データ更新を押して再試行してほしいのだ。")
+                    if _mode.startswith("短縮版"):
+                        _h = "| 日付 | 銘柄 | シグナル | 週足 | 検証4 | PER | PBR | VIX | 判断 | 結果 |"
+                        _s = "|---|---|---|---|---|---|---|---|---|---|"
+                        _body = [
+                            f"| {r['date']} | {r['label']}{r['done']} | 大底{r['bs']}"
+                            f"{'💎フル' if r['bs'] >= 10 else ''} | {_fmt_ws(r['ws'])} | {_v4(r)} | "
+                            f"{_pf(r)} | {_bf(r)} | {_vix_s} |  |  |"
+                            for r in _rows
+                        ]
+                        _note = "※そのままPER点灯記録ログに貼れるのだ（判断・結果の欄は相談後に埋めるのだ）。PERの*は株価÷EPSの概算なのだ。"
                     else:
-                        # PERとPBRの共通整形
-                        def _pf(r):
-                            if r["per"] is None:
-                                return "N/A(赤字)"
-                            return f"{r['per']:.1f}倍" + ("*" if r["per_est"] else "")
-                        def _bf(r):
-                            return f"{r['pbr']:.2f}倍" if r["pbr"] else "-"
-                        # 検証4の自動判定（今回の点灯を含めて1回目なら初点灯）
-                        def _v4(r):
-                            if r["bs"] >= 9 and r["n9"] <= 1:
-                                return "◎初点灯"
-                            if r["bs"] >= 9:
-                                return f"✕消化済({r['n9']}回目)"
-                            return "-(大底8)"
-                        _tmap = {"up": "up📈", "down": "down📉", "range": "range➡️"}
+                        # 天井シグナルは列から外した（天井で売る銘柄が現状ゼロで判断が変わらないため）。
+                        # アプリ画面上の天井バッジ表示は残してある。
+                        _h = ("| 銘柄 | 大底 | 週足 | 月足 | ダイバ月/日 | PER | PBR | 深度 | "
+                              "MA200乖離 | 年率ボラ | 6ヶ月 | 流動性 | 検証4 | VIX |")
+                        _s = "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+                        _body = []
+                        for r in _rows:
+                            _liq_m = "OK" if r["liq"] else "薄💧"
+                            _dev_s = f"{r['dev']:+.1f}%" if r["dev"] is not None else "-"
+                            _av_s = f"{r['avol']:.0f}%" if r["avol"] is not None else "-"
+                            _r6_s = f"{r['ret6']:+.0f}%" if r["ret6"] is not None else "-"
+                            _dv = ("有" if r["div_m"] else "無") + "/" + ("有" if r["div_d"] else "無")
+                            _body.append(
+                                f"| {r['label']}{r['done']} | {r['bs']}{'💎' if r['bs'] >= 10 else ''} | "
+                                f"{_fmt_ws(r['ws'])} | {_tmap.get(r['trend'], '対象外')} | {_dv} | "
+                                f"{_pf(r)} | {_bf(r)} | {r['dd']:.1f}% | {_dev_s} | {_av_s} | {_r6_s} | "
+                                f"{_liq_m} | {_v4(r)} | {_vix_s} |"
+                            )
+                        _note = ("※深度は-70〜-50%が最良帯・-50〜-30%が最弱帯。年率ボラ45%以上がVIX30弾の適格ライン。"
+                                 "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。")
 
-                        if _mode.startswith("短縮版"):
-                            _h = "| 日付 | 銘柄 | シグナル | 週足 | 検証4 | PER | PBR | VIX | 判断 | 結果 |"
-                            _s = "|---|---|---|---|---|---|---|---|---|---|"
-                            _body = [
-                                f"| {r['date']} | {r['label']}{r['done']} | 大底{r['bs']}"
-                                f"{'💎フル' if r['bs'] >= 10 else ''} | {_fmt_ws(r['ws'])} | {_v4(r)} | "
-                                f"{_pf(r)} | {_bf(r)} | {_vix_s} |  |  |"
-                                for r in _rows
-                            ]
-                            _note = "※そのままPER点灯記録ログに貼れるのだ（判断・結果の欄は相談後に埋めるのだ）。PERの*は株価÷EPSの概算なのだ。"
-                        else:
-                            _h = ("| 銘柄 | 大底 | 天井 | 週足 | 月足 | ダイバ月/日 | PER | PBR | 深度 | "
-                                  "MA200乖離 | 年率ボラ | 6ヶ月 | 流動性 | 検証4 | VIX |")
-                            _s = "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
-                            _body = []
-                            for r in _rows:
-                                _liq_m = "OK" if r["liq"] else "薄💧"
-                                _dev_s = f"{r['dev']:+.1f}%" if r["dev"] is not None else "-"
-                                _av_s = f"{r['avol']:.0f}%" if r["avol"] is not None else "-"
-                                _r6_s = f"{r['ret6']:+.0f}%" if r["ret6"] is not None else "-"
-                                _dv = ("有" if r["div_m"] else "無") + "/" + ("有" if r["div_d"] else "無")
-                                _body.append(
-                                    f"| {r['label']}{r['done']} | {r['bs']}{'💎' if r['bs'] >= 10 else ''} | "
-                                    f"{r['ts']} | {_fmt_ws(r['ws'])} | {_tmap.get(r['trend'], '対象外')} | {_dv} | "
-                                    f"{_pf(r)} | {_bf(r)} | {r['dd']:.1f}% | {_dev_s} | {_av_s} | {_r6_s} | "
-                                    f"{_liq_m} | {_v4(r)} | {_vix_s} |"
-                                )
-                            _note = ("※深度は-70〜-50%が最良帯・-50〜-30%が最弱帯。年率ボラ45%以上がVIX30弾の適格ライン。"
-                                     "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。")
+                    st.code("\n".join([_h, _s] + _body), language=None)
+                    st.caption(_note)
 
-                        st.code("\n".join([_h, _s] + _body), language=None)
-                        st.caption(_note)
 # === モメンタムシグナル一覧（折りたたみ・買い/売りの2枠）===
 with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜買い=6ヶ月+50%かつMA200上／売り=MA200割れ）"):
     with st.spinner("モメンタム判定中..."):
@@ -986,15 +1057,22 @@ with col_t:
     ticker_name = st.radio("銘柄を選択", list(GROUPS[group_name].keys()))
 
 # === 直接入力＋✖️クリアボタン ===
-# 文字が残ると登録銘柄の選択を上書きし続けるため、ワンタップで消せるようにした
+# 文字が残ると登録銘柄の選択を上書きし続けるため、ワンタップで消せるようにした。
+# ★重要：クリアは必ずon_clickコールバックで行う。
+# ボタンのifブロック内でst.session_state["custom_ticker"]=""を実行する書き方は動かない
+# （text_inputが先に描画済みのためその回のrunでは反映されず、Streamlitがウィジェット生成後の
+#   同キー書き換えを拒否して例外を投げる場合もある）。コールバックはrerunの前に走るので、
+# ウィジェットはクリア後の値を読んで正しく空になる。
+def _clear_custom_ticker():
+    st.session_state["custom_ticker"] = ""
+
 col_in, col_x = st.columns([5,1])
 with col_in:
     st.text_input("直接入力（米国株:AAPL / 日本株:4桁数字でOK 例:7203）", key="custom_ticker")
 with col_x:
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-    if st.button("✖️", key="clear_custom", help="入力をクリアして登録銘柄の表示に戻す"):
-        st.session_state["custom_ticker"] = ""
-        st.rerun()
+    st.button("✖️", key="clear_custom", help="入力をクリアして登録銘柄の表示に戻す",
+              on_click=_clear_custom_ticker)
 
 _c = st.session_state.get("custom_ticker", "").strip()
 ticker = (_c + ".T" if _c.isdigit() and len(_c) == 4 else _c.upper()) if _c else GROUPS[group_name][ticker_name]
