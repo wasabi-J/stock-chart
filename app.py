@@ -5,6 +5,10 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pandas.tseries.offsets import BDay
+from datetime import datetime, timezone, timedelta
+
+# Streamlit CloudのサーバーはUTCで動くため、表示は必ずJSTへ明示変換する
+JST = timezone(timedelta(hours=9))
 
 st.set_page_config(page_title="大底・天井スコア", layout="wide")
 
@@ -39,7 +43,7 @@ GROUPS = {
         "EWZ（ブラジルETF）": "EWZ",
         "AMD": "AMD",
         "ESAB（溶接・切断機器）": "ESAB",
-        "TTD（トレードデスク・広告）": "TTD",
+        "TTD（トレードデスク・広告）🔬対象外:バリュエーション型": "TTD",
         "RIVN（リビアン・EV）": "RIVN",
         "OLED（ユニバーサルディスプレイ）": "OLED",
         "MP（MPマテリアルズ・レアアース）": "MP",
@@ -112,7 +116,11 @@ ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
 
 # 🔬対象外＝スコアが点いても買い判断に使わない銘柄。バケットの件数から除外する
 # （件数が水増しされると「今日は何件見るべきか」の体感が狂うため）。表示自体は参考枠で残す。
-EXCLUDED_TICKERS = {"SOXL", "QS", "TSLL"}
+# TTD＝バリュエーション・リセット型には大底スコアが効かないと決着済み（5年で30回以上点いて全外れ）。
+# 数字だけ見ると理想形（大底9・週足8🎯・PER16倍・深度-83.8%）なので、疲れている時に
+# 背景を思い出せず手が出る危険がある。タグは人間の記憶を当てにしないための装置として置く。
+# 教材としての観察は失われない（見るのはEPSと月足downの2点で大底スコアとは無関係）。
+EXCLUDED_TICKERS = {"SOXL", "QS", "TSLL", "TTD"}
 
 # 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
 HELD_TICKERS = set(GROUPS["📁 保有中"].values())
@@ -332,7 +340,14 @@ def calc_weekly_bottom_score(df):
 
 @st.cache_data(ttl=3600)
 def scan_all():
+    """全銘柄スキャン。結果に加えて【取得メタ情報】も返す。
+    戻り値: (results, meta)
+      meta = {fetched_at: 取得実行時刻(JST), us_last: 米国株の最終足, jp_last: 日本株の最終足}
+    ★取得時刻は必ずこのキャッシュ関数の【内側】で生成すること。
+      外側でdatetime.now()を呼ぶと、実データが1時間前のキャッシュでも「今」と表示され、
+      画面が「最新を見ている」という致命的な嘘をつくことになる。"""
     results = []
+    us_last, jp_last = None, None
     for label, tk in ALL_TICKERS:
         try:
             d = load_data(tk, "5y")
@@ -341,9 +356,17 @@ def scan_all():
             bs, _ = calc_bottom_score(d.iloc[-1])
             ts, _ = calc_top_score(d.iloc[-1])
             results.append((label, tk, bs, ts))
+            # 最終足の日付は市場ごとに集計する（日本は15時に引けている一方、米国は前営業日どまり）
+            # ※load_data内でdropna済みなので末尾の空行を拾う心配はない
+            idx = d.index[-1]
+            if tk.endswith(".T") or tk.startswith("^N"):
+                jp_last = idx if jp_last is None or idx > jp_last else jp_last
+            elif tk not in ("BTC-USD",):  # 暗号資産は24時間動くので市場判定から外す
+                us_last = idx if us_last is None or idx > us_last else us_last
         except Exception:
             continue
-    return results
+    meta = {"fetched_at": datetime.now(JST), "us_last": us_last, "jp_last": jp_last}
+    return results, meta
 
 # === フル点灯（大底10/10・天井9/9）の履歴を全銘柄ぶん集計（直近1年）===
 @st.cache_data(ttl=3600)
@@ -705,7 +728,7 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
 **集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
-**検証済(対象外)**: SOXL/QS/TSLLは🔬対象外＝バケットの件数に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で大底スコアは一切使わず、登録目的は$7割れの検知のみ。
+**検証済(対象外)**: SOXL/QS/TSLL/TTDは🔬対象外＝バケットの件数と一括出力に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で登録目的は$7割れの検知のみ。TTD=バリュエーション・リセット型（PER297倍→17倍の縮小がそのまま-89%の株価下落に一致）で大底スコアが効かないと決着済み・観察はEPSと月足downの2点のみ。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋月足トレンドup＋できればVIX25以上。月足downなら落ちるナイフ扱いで見送り。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
@@ -714,8 +737,29 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
 
-with st.spinner("登録銘柄をスキャン中（初回は20秒ほど）..."):
-    scan = scan_all()
+with st.spinner("登録銘柄をスキャン中（初回は35秒ほど）..."):
+    scan, scan_meta = scan_all()
+
+# === データの鮮度表示（2026-08-18追加）===
+# 目的は「ズレを埋めること」ではなく【ズレていることが分かる状態にすること】。
+# アプリは確定した日足で動かすのが正しく、ザラ場データを入れるとスコアが分刻みで揺れる
+# （8/17にMMSが数分で大底9→8、ACMが週足4→8に振れた実例あり）。リアルタイム化は判断を悪くする。
+# ここで確認したいのは【見たかった終値がちゃんと入っているか】＝朝6時に開いた画面が
+# 前日の引けなのか前々日どまりなのかを区別できること。
+_fa = scan_meta.get("fetched_at")
+_us, _jp = scan_meta.get("us_last"), scan_meta.get("jp_last")
+_freshness = f"🕒 取得 {_fa.strftime('%m-%d %H:%M')} JST" if _fa is not None else "🕒 取得時刻 -"
+_freshness += f"　／　最終足 米国 {_us.strftime('%m-%d')}引け" if _us is not None else "　／　最終足 米国 -"
+_freshness += f"・日本 {_jp.strftime('%m-%d')}引け" if _jp is not None else "・日本 -"
+st.caption(_freshness)
+
+# 米国市場の取引時間中（日本時間22:30〜翌5:00）は確定値ではない旨を警告する。
+# 「判断は米国市場の引け後（日本時間の朝）に行う」という運用ルールを画面側で担保する装置。
+_now_jst = datetime.now(JST)
+_hm = _now_jst.hour * 60 + _now_jst.minute
+if _hm >= 22 * 60 + 30 or _hm < 5 * 60:
+    st.warning("⚠️ 今は米国市場の取引時間中なのだ。表示中の米国株スコアは**前営業日の確定値**で、"
+               "今まさに動いている値動きは反映されていないのだ。判断は米国の引け後（日本時間の朝）に行うのだ")
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
 # 背景：母集団70銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
@@ -827,7 +871,8 @@ if _excluded_lit:
     with st.expander(f"🔬 対象外銘柄の点灯（参考・{len(_excluded_lit)}件）", expanded=False):
         for r in _bucket_sort(_excluded_lit):
             st.markdown(_render_row(r))
-        st.caption("SOXLはVIX≥25限定で検討可・QSとTSLLは買い判断に使わないのだ（TSLLは$7割れの検知用）")
+        st.caption("SOXLはVIX≥25限定で検討可・QSとTSLLとTTDは買い判断に使わないのだ"
+                   "（TSLLは$7割れの検知用／TTDはバリュエーション・リセット型で大底スコアが効かないと決着済み）")
 
 # --- ⛔天井シグナル（保有銘柄でのみ意味を持つ）---
 _tops = []
@@ -877,9 +922,11 @@ if MOMENTUM_HELD:
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
 # 一斉点灯時に1銘柄ずつ相談すると往復が増えるため、選んだ銘柄をまとめて表に出す。
-# 「分析済み」チェックはセッション内のみ（リロードで消える＝永続化しない仕様）。
+# ★🔬対象外（SOXL/QS/TSLL/TTD）はここにも出さない＝構造的な土俵外なので選択肢に並べない。
+#   （旧「分析済みチェック」は相談対象を大底9以上に絞ったことで不要になったため廃止した。
+#     恒久的に外したい銘柄はEXCLUDED_TICKERSで扱うのが正しい＝一時的な作業印と構造的除外は別物。）
 _lit = [(lb, tk, bs, ts) for lb, tk, bs, ts in scan
-        if bs >= 8 and tk not in ("^VIX", "^TNX")]
+        if bs >= 8 and tk not in ("^VIX", "^TNX") and tk not in EXCLUDED_TICKERS]
 _lit.sort(key=lambda x: -x[2])  # 大底スコア降順
 
 with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}銘柄・タップで開く）"):
@@ -913,12 +960,6 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
 
         _sel = st.multiselect("出力する銘柄（デフォルト＝大底9以上）", _opts, key="bulk_sel")
 
-        st.caption("✅ 分析済みチェック（相談が済んだ銘柄に印をつける。リロードで消えるのだ）")
-        _dcols = st.columns(min(3, max(1, len(_lit))))
-        for _i, (lb, tk, bs, ts) in enumerate(_lit):
-            with _dcols[_i % len(_dcols)]:
-                st.checkbox(lb.split("（")[0].strip(), key=f"bulk_done_{tk}")
-
         _mode = st.radio("出力フォーマット",
                          ["短縮版（PER点灯記録ログ用）", "全項目版（判断材料フル）"],
                          index=0, horizontal=True, key="bulk_mode")
@@ -939,17 +980,20 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
                         if _r is None:
                             continue
                         _r["label"] = lb.split("（")[0].strip()
-                        _r["done"] = "✅" if st.session_state.get(f"bulk_done_{tk}") else ""
                         _rows.append(_r)
 
                 if not _rows:
                     st.warning("データ取得に失敗したのだ。🔄データ更新を押して再試行してほしいのだ。")
                 else:
-                    # PERとPBRの共通整形
-                    def _pf(r):
-                        if r["per"] is None:
+                    # PERとPBRの整形。★赤字と取得失敗を必ず区別する。
+                    # 取得失敗を「N/A(赤字)」と記録すると前向き検証のデータが汚れるため、
+                    # ログ用の短縮版では【空欄のまま】出す（あとで手で埋められる）。
+                    def _pf(r, blank_on_fail=False):
+                        if r["per"] is not None:
+                            return f"{r['per']:.1f}倍" + ("*" if r["per_est"] else "")
+                        if r["pbr"]:
                             return "N/A(赤字)"
-                        return f"{r['per']:.1f}倍" + ("*" if r["per_est"] else "")
+                        return "" if blank_on_fail else "⚠️取得失敗"
                     def _bf(r):
                         return f"{r['pbr']:.2f}倍" if r["pbr"] else "-"
                     # 検証4の自動判定（今回の点灯を含めて1回目なら初点灯）
@@ -965,12 +1009,14 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
                         _h = "| 日付 | 銘柄 | シグナル | 週足 | 検証4 | PER | PBR | VIX | 判断 | 結果 |"
                         _s = "|---|---|---|---|---|---|---|---|---|---|"
                         _body = [
-                            f"| {r['date']} | {r['label']}{r['done']} | 大底{r['bs']}"
+                            f"| {r['date']} | {r['label']} | 大底{r['bs']}"
                             f"{'💎フル' if r['bs'] >= 10 else ''} | {_fmt_ws(r['ws'])} | {_v4(r)} | "
-                            f"{_pf(r)} | {_bf(r)} | {_vix_s} |  |  |"
+                            f"{_pf(r, blank_on_fail=True)} | {_bf(r)} | {_vix_s} |  |  |"
                             for r in _rows
                         ]
-                        _note = "※そのままPER点灯記録ログに貼れるのだ（判断・結果の欄は相談後に埋めるのだ）。PERの*は株価÷EPSの概算なのだ。"
+                        _note = ("※そのままPER点灯記録ログに貼れるのだ（判断・結果の欄は相談後に埋めるのだ）。"
+                                 "PERの*は株価÷EPSの概算なのだ。**PER欄が空欄なのは取得失敗**で、赤字ではないのだ"
+                                 "（赤字ならPBRが併記されるのだ）。空欄のまま残すか、必要なら手で埋めるのだ。")
                     else:
                         # 天井シグナルは列から外した（天井で売る銘柄が現状ゼロで判断が変わらないため）。
                         # アプリ画面上の天井バッジ表示は残してある。
@@ -985,13 +1031,14 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
                             _r6_s = f"{r['ret6']:+.0f}%" if r["ret6"] is not None else "-"
                             _dv = ("有" if r["div_m"] else "無") + "/" + ("有" if r["div_d"] else "無")
                             _body.append(
-                                f"| {r['label']}{r['done']} | {r['bs']}{'💎' if r['bs'] >= 10 else ''} | "
+                                f"| {r['label']} | {r['bs']}{'💎' if r['bs'] >= 10 else ''} | "
                                 f"{_fmt_ws(r['ws'])} | {_tmap.get(r['trend'], '対象外')} | {_dv} | "
                                 f"{_pf(r)} | {_bf(r)} | {r['dd']:.1f}% | {_dev_s} | {_av_s} | {_r6_s} | "
                                 f"{_liq_m} | {_v4(r)} | {_vix_s} |"
                             )
                         _note = ("※深度は-70〜-50%が最良帯・-50〜-30%が最弱帯。年率ボラ45%以上がVIX30弾の適格ライン。"
-                                 "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。")
+                                 "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。"
+                                 "PERが⚠️取得失敗でも判定（大底9・週足5以上・月足up）は一切変わらないのだ。")
 
                     st.code("\n".join([_h, _s] + _body), language=None)
                     st.caption(_note)
@@ -1105,9 +1152,19 @@ c3.metric("大底スコア", f"{bottom_score}/10")
 c4.metric("天井スコア", f"{top_score}/9")
 
 # === PER・PBR表示 ===
-# 赤字銘柄はPERがN/Aになるため、PBRを併記して判断材料にする（点灯記録ログの記法と統一）
+# ★「赤字」と「取得失敗」を必ず区別する（2026-08-18のyfinance障害で両者が同じ表示になり混乱した）。
+# 赤字ならPBRは必ず併記されるはずなので、PBRまで空なら赤字ではなく取得失敗と判定できる。
+# yfinanceはYahooのウェブ用エンドポイントを読んでおり、非市場データ（PER/PBR等）は暗号化されていて
+# 鍵の場所が変わるたびに壊れる。株価・出来高は別経路なのでスコアだけは無傷、という症状になる。
+# ★重要：PERは買いラインの判定に一度も入っていない（判定は大底9・週足5以上・月足upで完結）。
+# PERが壊れても売買判断は一切変わらない。用途は前向き検証の記録と、PER3桁の足切りのみ。
 _per, _pbr, _per_est = get_per_pbr(ticker)
-_per_txt = (f"{_per:.1f}倍" + ("（株価÷EPS概算）" if _per_est else "")) if _per else "N/A（赤字 or 取得不可）"
+if _per is not None:
+    _per_txt = f"{_per:.1f}倍" + ("（株価÷EPS概算）" if _per_est else "")
+elif _pbr:
+    _per_txt = "N/A（赤字）"
+else:
+    _per_txt = "⚠️取得失敗（yfinance側の問題・判定に影響なし）"
 _pbr_txt = f"{_pbr:.2f}倍" if _pbr else "-"
 st.caption(f"📐 PER {_per_txt}　｜　PBR {_pbr_txt}　※現在値のスナップショット（過去PERは取得不可）")
 
