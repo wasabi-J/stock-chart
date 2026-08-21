@@ -15,6 +15,7 @@ st.set_page_config(page_title="大底・天井スコア", layout="wide")
 GROUPS = {
     "📁 保有中": {
         "COIN（コインベース）": "COIN",
+        "CPRI（カプリHD・逆張り柱）": "CPRI",
         "MSTR（マイクロストラテジー）": "MSTR",
         "1328（金ETF・日本）": "1328.T",
         "6963（ローム・モメンタム柱）": "6963.T",
@@ -57,7 +58,6 @@ GROUPS = {
         "ACM（エーコム・建設エンジ）🆕": "ACM",
         "AMTM（アメンタム・政府サービス）🆕": "AMTM",
         "APTV（アプティブ・自動車部品）🆕": "APTV",
-        "CPRI（カプリHD・ヴェルサーチ等）🆕": "CPRI",
         "INTR（インテル&Co・ブラジル銀行）🆕": "INTR",
         "LVS（ラスベガス・サンズ）🆕": "LVS",
         "MMS（マキシマス・政府BPO）🆕": "MMS",
@@ -158,6 +158,12 @@ def load_data(ticker, period="5y"):
     df["sma25"] = df["close"].rolling(25).mean()
     df["sma75"] = df["close"].rolling(75).mean()
     df["sma200"] = df["close"].rolling(200).mean()
+    # ★RSIの計算方式についての注意（2026-08-20記録）
+    # アプリは【単純移動平均方式】(rolling(14).mean())、Colabのバックテスト検証は【Wilder方式】
+    # (指数平滑・ewm(alpha=1/14))を使っている。同じ「RSI(14)」でも値が微妙に異なるため、
+    # 点灯日が1〜2日ずれることがある。RSI≤30は10条件のうち1つなので大底スコアが±1動く程度で、
+    # 実運用の判断（大底9以上で相談）は変わらない。
+    # ★どちらかに揃えるなら影響が大きいので株式部屋で決めること（勝手に変えると過去の検証と接続が切れる）。
     delta = df["close"].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
@@ -234,14 +240,18 @@ def calc_annual_vol(df):
         return None
 
 def check_liquidity(df, ticker):
-    """20日平均売買代金が閾値以上か判定。日本株1億円/日・米国株10億円/日。
+    """20日平均売買代金が閾値以上か判定。
+    ★2026-08-20修正：閾値が桁違いだった（旧=米国$10億/日・日本¥1億/日）。
+      週次スクリーニングの基準は【米国$7M以上】なので、旧設定は米国で143倍も厳しく、
+      逆に日本は10分の1と甘かった。CPRIの$63M(基準の9倍)が「薄商い」と警告された原因はこれ。
+      新設定=【米国$7M・日本¥10億】でスクリーニング側と一致させる。
     戻り値: (売買代金, 閾値以上か, 通貨記号)"""
     try:
         to = df["turnover_ma20"].iloc[-1]
         if pd.isna(to):
             return None, None, ""
         is_jp = (".T" in ticker) or ticker.startswith("^N")
-        thr = 100_000_000 if is_jp else 1_000_000_000
+        thr = 1_000_000_000 if is_jp else 7_000_000
         sym = "¥" if is_jp else "$"
         return float(to), bool(to >= thr), sym
     except Exception:
@@ -285,8 +295,10 @@ def calc_weekly_bottom_score(df):
         if len(c) < 60:
             return None, False
         # 進行中の週を除外（最新バーの金曜が未来or今日なら落とす）
+        # ★JSTで判定する。pd.Timestamp.now()はStreamlit CloudではUTCを返すため、
+        #   日本時間の朝に日付が1日ずれて進行中バーの除外を誤る可能性がある。
         last_fri = c.index[-1]
-        if last_fri.normalize() >= pd.Timestamp.now().normalize():
+        if last_fri.normalize() >= pd.Timestamp(datetime.now(JST).date()):
             c = c.iloc[:-1]
         if len(c) < 60:
             return None, False
@@ -462,7 +474,10 @@ TREND_EXCLUDE = {"COIN","MSTR","MARA","CLSK","RIOT","BTDR","SOXL","QS","SOFI"}
 def monthly_trend_direction(ticker, period="max"):
     """月足の移動チャネル（窓18ヶ月・相関0.3以上）で、直近のトレンド方向を判定。
     戻り値: 'up'（上昇）/ 'down'（下降）/ 'range'（レンジ）/ None（対象外・データ不足）
-    検証結果：上昇トレンド中の大底はEV+34.8%・勝率47%（フィルター無し+19.7%より+15pt改善、前半後半とも成立=頑健）"""
+    ★2026-08-19のv2検証（3年レンズ・実測）：up +50.4% / range +54.2% / down +41.9%。
+    　結論は【downを弱く減点するだけ。upを要求せず、rangeは満額で買ってよい】。
+    　旧docstringの「EV+34.8%・勝率47%」はサンプルが薄く（up側n=4）、桁も実測と合わないため撤回した。
+    　この関数の出力は見送りの決定打には使わないこと。"""
     if ticker in TREND_EXCLUDE:
         return None  # 暗号資産・高ボラ株はトレンドライン無効
     try:
@@ -638,21 +653,42 @@ def get_vix_level():
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
 # 母集団70銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
 # 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
-def _count_bottom9_clusters(d):
-    """その銘柄で大底9以上が過去に何回点灯したかを数える（10営業日以内の連続は1回に集約）。
-    検証4「その銘柄で初の大底9か」の自動判定に使う。"""
+def _cluster_signals(d, kind="bottom", thr=9, gap=10):
+    """点灯日をクラスタ化して「1山＝1イベント」に畳む共通処理。
+    ★2026-08-20：同じ銘柄で点灯回数が2つの箇所で食い違う不具合を潰すため、
+      数え方をここに一本化した（旧_count_bottom9_clustersは全集約、旧calc_signal_historyは
+      フル点灯だけ集約せず個別に残していたので、CPRIのような常連銘柄で回数がズレていた）。
+      検証4（初点灯か否か）は資金配分の根拠なので、回数のブレは判断のブレに直結する。
+    戻り値: [(日付, 代表価格, そのクラスタ内の最高スコア), ...] 日付昇順
+      代表価格＝大底なら最安値・天井なら最高値の日。最高スコアを持つので💎判定もできる。"""
     raw = []
     for idx in range(260, len(d)):
-        bs, _ = calc_bottom_score(d.iloc[idx])
-        if bs >= 9:
-            raw.append(idx)
+        r = d.iloc[idx]
+        s = calc_bottom_score(r)[0] if kind == "bottom" else calc_top_score(r)[0]
+        if s >= thr:
+            raw.append((idx, d.index[idx], float(r["close"]), s))
     if not raw:
-        return 0
-    clusters = 1
-    for a, b in zip(raw, raw[1:]):
-        if b - a > 10:
-            clusters += 1
-    return clusters
+        return []
+    clusters = []
+    cur = [raw[0]]
+    for item in raw[1:]:
+        if item[0] - cur[-1][0] <= gap:
+            cur.append(item)
+        else:
+            clusters.append(cur)
+            cur = [item]
+    clusters.append(cur)
+    out = []
+    for c in clusters:
+        best = min(c, key=lambda x: x[2]) if kind == "bottom" else max(c, key=lambda x: x[2])
+        out.append((best[1], best[2], max(x[3] for x in c)))
+    out.sort(key=lambda x: x[0])
+    return out
+
+def _count_bottom9_clusters(d):
+    """その銘柄で大底9以上が過去に何回点灯したかを数える（10営業日以内の連続は1回に集約）。
+    検証4「その銘柄で初の大底9か」の自動判定に使う。★数え方は_cluster_signalsに統一済み。"""
+    return len(_cluster_signals(d, kind="bottom", thr=9))
 
 @st.cache_data(ttl=3600)
 def bulk_signal_row(ticker, period="5y"):
@@ -725,11 +761,12 @@ if st.button("🔄 データ更新（最新の株価を取り直す）", use_con
 
 with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
-**シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3、TP+50%/SL-15%/最大180日。売りは半分利確＋残りに逆指値(高値-8〜10%)。
+**シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3。損切りSL-15%固定、利確は値幅段階+100/300/500%(守り銘柄のみTP+50%)、保有は年単位(長いほどEVが高い)。★180日撤退は旧ルールで廃止済み。
+**出口の序列**: 暗号資産系=恩株化(+46%) / 指数優良株=値幅段階利確 / モメンタム柱=日足MA200割れ終値のみ(天井シグナルも利確ラインもなし) / KRUS等チャネル系=地形の上辺で売る。
 **集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
 **検証済(対象外)**: SOXL/QS/TSLL/TTDは🔬対象外＝バケットの件数と一括出力に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で登録目的は$7割れの検知のみ。TTD=バリュエーション・リセット型（PER297倍→17倍の縮小がそのまま-89%の株価下落に一致）で大底スコアが効かないと決着済み・観察はEPSと月足downの2点のみ。
-**MP（レアアース）**: 通常より厳しい買い条件＝大底9＋月足トレンドup＋できればVIX25以上。月足downなら落ちるナイフ扱いで見送り。
+**MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
 **🆕銘柄**: 2026-08-15の週次スクリーニング通過組。プール入場審査は通過済みだが実弾は点灯待ち。
@@ -858,7 +895,8 @@ else:
         with st.expander(f"🎯 大底9（{_n9}件）＝買いライン", expanded=True):
             for r in _bucket_sort(_buckets[9]):
                 st.markdown(_render_row(r))
-            st.caption("買いラインはここ。週足<5は足切り・月足downは決定打で見送り・VIX30時はボラ45%以上を取るのだ")
+            st.caption("買いラインはここ。週足<5は足切り・VIX30時はボラ45%以上を取るのだ。"
+                       "月足downは**弱い減点**にとどめる（3年EV+41.9%＝見送りの決定打にはしないのだ）")
     # 大底8（未達）＝折りたたみ
     if _n8:
         with st.expander(f"大底8（{_n8}件）＝買いライン未達", expanded=False):
@@ -941,6 +979,13 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
 
         if "bulk_sel" not in st.session_state:
             st.session_state["bulk_sel"] = _def
+        else:
+            # ★2026-08-20修正：翌日に点灯銘柄が変わると、session_stateに残った古い選択値が
+            #   選択肢に存在せずStreamlitが例外を投げてアプリ全体が落ちる。
+            #   「昨日ACMを選んだ→今日ACMは消灯」で発生する。毎朝開く運用なので現実に起きる。
+            #   multiselectを描画する前に、有効な選択肢だけへ絞り込んでおく。
+            _kept = [o for o in st.session_state["bulk_sel"] if o in _opts]
+            st.session_state["bulk_sel"] = _kept if _kept else _def
 
         def _sel_all():
             st.session_state["bulk_sel"] = _opts
@@ -1037,8 +1082,8 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
                                 f"{_liq_m} | {_v4(r)} | {_vix_s} |"
                             )
                         _note = ("※深度は-70〜-50%が最良帯・-50〜-30%が最弱帯。年率ボラ45%以上がVIX30弾の適格ライン。"
-                                 "月足downは落ちるナイフ扱い（TTDの教訓）なのだ。"
-                                 "PERが⚠️取得失敗でも判定（大底9・週足5以上・月足up）は一切変わらないのだ。")
+                                 "月足は3年レンズでrange+54.2%＞up+50.4%＞down+41.9%＝**downも弱い減点にとどめる**のだ。"
+                                 "PERが⚠️取得失敗でも判定（大底9・週足5以上）は一切変わらないのだ。")
 
                     st.code("\n".join([_h, _s] + _body), language=None)
                     st.caption(_note)
@@ -1189,49 +1234,57 @@ if ticker == "^VIX":
 
 if bottom_score >= 10:
     st.error(f"💎🚨 **大底フル点灯（{bottom_score}/10 満点）**")
-    t1 = pd.Timestamp.today()
-    t2 = (t1 + BDay(15)).strftime("%m/%d")
-    t3 = (t1 + BDay(30)).strftime("%m/%d")
-    st.markdown(f"""**📋 大底ホームラン戦略（検証済：勝率54% EV+10.4%）**
+    _t1 = pd.Timestamp.today()
+    _t2 = (_t1 + BDay(15)).strftime("%m/%d")
+    _t3 = (_t1 + BDay(30)).strftime("%m/%d")
+    st.markdown(f"""**📋 大底ホームラン戦略（全237取引：勝率30% ペイオフ9.2倍 EV+30%）**
 - 第1回買い: 本日（資金の1/3）
-- 第2回買い: {t2}頃（+15営業日、1/3）
-- 第3回買い: {t3}頃（+30営業日、1/3）
-- 利確: 平均取得単価 **+50%** / 損切: 平均取得単価 **-15%** / 最大保有180日
-- ⚠️ ファンダメンタル（事業・財務）の確認を忘れずに""")
+- 第2回買い: {_t2}頃（+15営業日、1/3）
+- 第3回買い: {_t3}頃（+30営業日、1/3）
+- 損切: 平均取得単価 **-15%**（固定）
+- 利確: **値幅段階利確 +100% / +300% / +500%**（守り銘柄のみTP+50%）
+- 保有: **年単位**（長く持つほどEVが上がる＝5年で+49%）。180日で切らないのだ
+- ⚠️ 満点10は大底9より-11pt。「深いほど良い」ではないのだ
+- ⚠️ ファンダメンタル（財務健全性＝倒産リスク）の確認を忘れずに""")
 elif bottom_score == 9:
     st.error(f"🟢 **買いシグナル点灯（大底スコア{bottom_score}/10）**")
-    t1 = pd.Timestamp.today()
-    t2 = (t1 + BDay(15)).strftime("%m/%d")
-    t3 = (t1 + BDay(30)).strftime("%m/%d")
-    st.markdown(f"""**📋 大底ホームラン戦略（検証済：勝率54% EV+10.4%）**
+    _t1 = pd.Timestamp.today()
+    _t2 = (_t1 + BDay(15)).strftime("%m/%d")
+    _t3 = (_t1 + BDay(30)).strftime("%m/%d")
+    st.markdown(f"""**📋 大底ホームラン戦略（全237取引：勝率30% ペイオフ9.2倍 EV+30%）**
 - 第1回買い: 本日（資金の1/3）
-- 第2回買い: {t2}頃（+15営業日、1/3）
-- 第3回買い: {t3}頃（+30営業日、1/3）
-- 利確: 平均取得単価 **+50%** / 損切: 平均取得単価 **-15%** / 最大保有180日
-- ⚠️ ファンダメンタル（事業・財務）の確認を忘れずに""")
+- 第2回買い: {_t2}頃（+15営業日、1/3）
+- 第3回買い: {_t3}頃（+30営業日、1/3）
+- 損切: 平均取得単価 **-15%**（固定）
+- 利確: **値幅段階利確 +100% / +300% / +500%**（守り銘柄のみTP+50%）
+- 保有: **年単位**（長く持つほどEVが上がる＝5年で+49%）。180日で切らないのだ
+- ⚠️ 7回負けて3回大きく勝つ設計なのだ。負けが続くのは仕様通りなのだ
+- ⚠️ ファンダメンタル（財務健全性＝倒産リスク）の確認を忘れずに""")
 elif bottom_score == 8:
     st.warning(f"⚠️ 買いゾーン接近（大底スコア{bottom_score}/10）：あと1条件で買いシグナル")
 elif bottom_score >= 6:
     st.info(f"📊 大底圏（{bottom_score}/10）：監視継続")
 
-# === トレンド方向フィルター（常時表示に変更・閾値撤廃）===
-# 検証：上昇トレンド中の大底はEV+34.8%・勝率47%（フィルター無し+19.7%より+15pt改善・前半後半とも成立=頑健）
-# 「大局は順張り（上昇トレンド）、エントリーは逆張り（大底）」が最強
-# 大底8以上のときは判断材料として大きく表示、それ未満でも地形把握のため常時caption表示する
-trend = monthly_trend_direction(ticker)
+# === トレンド方向フィルター（常時表示・閾値撤廃）===
+# ★2026-08-19のv2検証で数値を実測し直した（3年レンズ）：up+50.4% / range+54.2% / down+41.9%。
+# 旧文言の「up=EV+34.8%・range=EV+16%・down=EV+12%」は出典が古く、rangeとdownを過小評価していた。
+# 【結論：月足フィルターは「downを弱く減点する」だけ。upを要求しないし、rangeは満額で買ってよい】
+# 実際CPRIは月足rangeで買った銘柄であり、旧文言を素直に読むと見送ってしまう危険があった。
+# ※monthly_trend_directionは5y指定で呼ぶ（判定窓は18ヶ月なので結果は同じ・maxだと二重ダウンロードになる）
+trend = monthly_trend_direction(ticker, "5y")
 if bottom_score >= 8:
     if trend == "up":
-        st.success("📈 **月足トレンド：上昇中** → 上昇トレンド中の大底はEV+34.8%・勝率47%（最強の買い場）。資金を厚めに検討")
+        st.success("📈 **月足トレンド：上昇中** → 3年レンズでEV+50.4%。良い地形なのだ（ただしrangeとほぼ同等で、upを買いの条件にはしないのだ）")
     elif trend == "down":
-        st.warning("📉 **月足トレンド：下降中** → 下降トレンド中の大底はEV+12%と弱め。慎重に")
+        st.warning("📉 **月足トレンド：下降中** → 3年レンズでEV+41.9%。up/rangeより弱いが**弱い減点にとどめる**のだ。見送りの決定打にはしないのだ")
     elif trend == "range":
-        st.info("➡️ **月足トレンド：レンジ（方向感なし）** → EV+16%と平凡。様子見も一案")
+        st.info("➡️ **月足トレンド：レンジ** → 3年レンズでEV+54.2%＝**3つの中で最良**。満額で買ってよいのだ")
     else:
         st.caption("ℹ️ この銘柄はトレンド方向フィルター対象外（暗号資産・高ボラ株はトレンドラインが効かないため）")
 else:
-    _tmap = {"up": "📈 月足トレンド：上昇中（大底点灯時は最強の買い場・EV+34.8%）",
-             "down": "📉 月足トレンド：下降中（大底が出ても弱め・EV+12%）",
-             "range": "➡️ 月足トレンド：レンジ（方向感なし・EV+16%）"}
+    _tmap = {"up": "📈 月足トレンド：上昇中（3年EV+50.4%）",
+             "down": "📉 月足トレンド：下降中（3年EV+41.9%・弱い減点にとどめる）",
+             "range": "➡️ 月足トレンド：レンジ（3年EV+54.2%＝最良・満額可）"}
     st.caption(_tmap.get(trend, "ℹ️ 月足トレンド：対象外（暗号資産・高ボラ株はトレンドラインが効かない）"))
 
 if top_score >= 9:
@@ -1268,57 +1321,21 @@ with st.expander("📋 スコア詳細（タップで開閉）", expanded=False)
         for label, ok, detail in top_checks:
             st.markdown(f"{'✅' if ok else '❌'} {label}　{detail}")
 
-# === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー。フル点灯は全て個別表示）===
+# === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー）===
 # ※コピー用サマリーでも点灯履歴を使うため、チャートより手前で計算しておく
+# ★2026-08-20修正1：引数にperiodを追加した。_dfは先頭アンダースコアでハッシュ対象外のため、
+#   旧実装はキャッシュキーが銘柄名だけになっており、期間を5y→maxに変えても古い結果が返っていた。
+#   検証4の判定根拠なので、期間を変えたのに回数が変わらないのは致命的だった。
+# ★2026-08-20修正2：数え方を_cluster_signalsに統一（フル点灯だけ個別に残す例外を廃止）。
+#   これで一括出力の点灯回数とサマリーの点灯回数が必ず一致する。
+#   💎マーカーはクラスタ内の最高スコアで判定するので、フル点灯の視認性は失われない。
 @st.cache_data(ttl=3600)
-def calc_signal_history(_df, ticker_key):
-    raw_bottom = []
-    raw_top = []
-    for idx in range(260, len(_df)):
-        r = _df.iloc[idx]
-        bs, _ = calc_bottom_score(r)
-        ts, _ = calc_top_score(r)
-        if bs >= 9:
-            raw_bottom.append((idx, _df.index[idx], float(r["close"]), bs))
-        if ts >= 8:
-            raw_top.append((idx, _df.index[idx], float(r["close"]), ts))
-
-    def clusterize(raw, pick="low", full_thr=None):
-        if not raw:
-            return []
-        # フル点灯（full_thr以上）は集約せず全て個別に残す
-        full_days = [(item[1], item[2], item[3]) for item in raw
-                     if full_thr is not None and item[3] >= full_thr]
-        # フル未満だけクラスタリング対象にする
-        sub = [item for item in raw
-               if not (full_thr is not None and item[3] >= full_thr)]
-        clusters = []
-        if sub:
-            cur = [sub[0]]
-            for item in sub[1:]:
-                if item[0] - cur[-1][0] <= 10:
-                    cur.append(item)
-                else:
-                    clusters.append(cur)
-                    cur = [item]
-            clusters.append(cur)
-        result = []
-        for c in clusters:
-            if pick == "low":
-                best = min(c, key=lambda x: x[2])
-            else:
-                best = max(c, key=lambda x: x[2])
-            result.append((best[1], best[2], best[3]))
-        # フル点灯を全て加えて日付順にソート
-        result.extend(full_days)
-        result.sort(key=lambda x: x[0])
-        return result
-
-    bottom_days = clusterize(raw_bottom, pick="low", full_thr=10)
-    top_days = clusterize(raw_top, pick="high", full_thr=9)
+def calc_signal_history(_df, ticker_key, period):
+    bottom_days = _cluster_signals(_df, kind="bottom", thr=9)
+    top_days = _cluster_signals(_df, kind="top", thr=8)
     return bottom_days, top_days
 
-sig_bottoms, sig_tops = calc_signal_history(df, ticker)
+sig_bottoms, sig_tops = calc_signal_history(df, ticker, period)
 
 # === コピー用サマリー（Claude相談用・画面に出ている情報を全部入り）===
 with st.expander("📄 コピー用サマリー（Claude相談用・タップで開く）", expanded=False):
@@ -1556,4 +1573,4 @@ st.plotly_chart(fig, use_container_width=True,
             "displaylogo": False,
             "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
 
-st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い+TP50%/SL15%/180日（EV+10.4%）")
+st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い＋SL-15%＋値幅段階利確+100/300/500%・保有は年単位（全237取引 勝率30% EV+30%）")
