@@ -54,33 +54,58 @@ GROUPS = {
         "TSLL（TSLA2倍ブル）🔬システム外": "TSLL",
         "XLE（エネルギーETF）": "XLE",
         "EC（エコペトロール・売却済）": "EC",
-        # --- 2026-08-15 週次スクリーニングv2 審査通過（米国株14）---
-        "ACM（エーコム・建設エンジ）🆕": "ACM",
-        "AMTM（アメンタム・政府サービス）🆕": "AMTM",
-        "APTV（アプティブ・自動車部品）🆕": "APTV",
-        "INTR（インテル&Co・ブラジル銀行）🆕": "INTR",
-        "LVS（ラスベガス・サンズ）🆕": "LVS",
-        "MMS（マキシマス・政府BPO）🆕": "MMS",
-        "NKE（ナイキ）🆕": "NKE",
-        "ONON（オン・スニーカー）🆕": "ONON",
-        "PFSI（ペニーマック・住宅ローン）🆕": "PFSI",
-        "POST（ポストHD・シリアル）🆕": "POST",
-        "PPC（ピルグリムズプライド・鶏肉）🆕": "PPC",
-        "SGI（ソムニグループ・マットレス）🆕": "SGI",
-        "ZTS（ゾエティス・動物用医薬）🆕": "ZTS",
+        # --- 2026-08-15 週次スクリーニングv2 審査通過（米国株13）---
+        "ACM（エーコム・建設エンジ）": "ACM",
+        "AMTM（アメンタム・政府サービス）": "AMTM",
+        "APTV（アプティブ・自動車部品）": "APTV",
+        "INTR（インテル&Co・ブラジル銀行）": "INTR",
+        "LVS（ラスベガス・サンズ）": "LVS",
+        "MMS（マキシマス・政府BPO）": "MMS",
+        "NKE（ナイキ）": "NKE",
+        "ONON（オン・スニーカー）": "ONON",
+        "PFSI（ペニーマック・住宅ローン）": "PFSI",
+        "POST（ポストHD・シリアル）": "POST",
+        "PPC（ピルグリムズプライド・鶏肉）": "PPC",
+        "SGI（ソムニグループ・マットレス）": "SGI",
+        "ZTS（ゾエティス・動物用医薬）": "ZTS",
         # --- 2026-08-15 週次スクリーニングv2 審査通過（日本株12）---
-        "2216（カンロ・製菓）🆕": "2216.T",
-        "3692（FFRIセキュリティ）🆕": "3692.T",
-        "3836（アバントグループ）🆕": "3836.T",
-        "3905（データセクション）🆕": "3905.T",
-        "4569（キョーリン製薬HD）🆕": "4569.T",
-        "5214（日本電気硝子）🆕": "5214.T",
-        "6787（メイコー・プリント基板）🆕": "6787.T",
-        "7003（三井E&S）🆕": "7003.T",
-        "7157（ライフネット生命）🆕": "7157.T",
-        "7649（スギホールディングス）🆕": "7649.T",
-        "7760（IMV・振動試験装置）🆕": "7760.T",
-        "9024（西武ホールディングス）🆕": "9024.T",
+        "2216（カンロ・製菓）": "2216.T",
+        "3692（FFRIセキュリティ）": "3692.T",
+        "3836（アバントグループ）": "3836.T",
+        "3905（データセクション）": "3905.T",
+        "4569（キョーリン製薬HD）": "4569.T",
+        "5214（日本電気硝子）": "5214.T",
+        "6787（メイコー・プリント基板）": "6787.T",
+        "7003（三井E&S）": "7003.T",
+        "7157（ライフネット生命）": "7157.T",
+        "7649（スギホールディングス）": "7649.T",
+        "7760（IMV・振動試験装置）": "7760.T",
+        "9024（西武ホールディングス）": "9024.T",
+        # --- 2026-08-22 週次スクリーニングv2 審査通過（米国株14）---
+        "ALHC（アラインメントヘルスケア・医療保険MA）🆕": "ALHC",
+        "FLO（フラワーズフーズ・製パン）🆕": "FLO",
+        "GAP（ギャップ・アパレル小売）🆕": "GAP",
+        "GME（ゲームストップ・現金9.7B）🆕": "GME",
+        "GRAB（グラブ・東南アジア配車）🆕": "GRAB",
+        "HDB（HDFC銀行・インド）🆕": "HDB",
+        "IPGP（IPGフォトニクス・レーザー）🆕": "IPGP",
+        "LII（レノックス・空調）🆕": "LII",
+        "MIR（ミリオン・放射線検出）🆕": "MIR",
+        "ROL（ロリンズ・害虫駆除）🆕": "ROL",
+        "SITE（サイトワン・造園資材卸）🆕": "SITE",
+        "SYM（シンボティック・物流ロボ）🆕": "SYM",
+        "TIMB（TIMブラジル・通信）🆕": "TIMB",
+        "WING（ウィングストップ・チキン）🆕": "WING",
+        # --- 2026-08-22 週次スクリーニングv2 審査通過（日本株9）---
+        "1801（大成建設）🆕": "1801.T",
+        "1835（東鉄工業）🆕": "1835.T",
+        "1893（五洋建設）🆕": "1893.T",
+        "2980（SRE HD）🆕": "2980.T",
+        "4685（菱友システムズ）🆕": "4685.T",
+        "6088（シグマクシスHD）🆕": "6088.T",
+        "6269（三井海洋開発）🆕": "6269.T",
+        "6961（エンプラス・半導体系）🆕": "6961.T",
+        "7409（AeroEdge・PER予64倍）🆕": "7409.T",
     },
     "📁 指数・コモディティ": {
         "BTC（ビットコイン）": "BTC-USD",
@@ -133,6 +158,22 @@ MOMENTUM_HELD = {
     "6963.T": "6963 ローム",
 }
 
+# ★★★ RSI方式＝Wilder方式に統一（2026-08-22切替・株式部屋の決定）★★★
+# 旧実装は単純移動平均方式（Cutler's RSI, rolling(14).mean()）だったが、Colabのバックテスト
+# （237取引・EV+30%・大底9の買いライン・週足<5の足切り・7-8最良帯）は全てWilder方式の上で
+# 校正されている。つまりアプリの「大底9」はバックテストの「大底9」と別物を表示していた。
+# SMA方式は14本の窓から古い足が抜けた瞬間に値が跳ねるため安値圏の極値に届きやすく、
+# 検証していない「ギリギリの点灯」を余分に拾っていた可能性が高い（限界的な点灯＝最も弱い打席）。
+# ★切替後は点灯が【減る】のが正常。増えたら実装ミスを疑うこと。
+# ★保有銘柄（CPRI/ローム）はエントリー根拠の再判定をしない。出口ルールで管理済み。
+# ★楽天証券のRSIとの境界付近の差は当日ザラ場の扱いの差であり、境界付近は楽天を正とする運用は不変。
+def wilder_rsi(s, period=14):
+    """Wilder方式のRSI（平滑化係数1/period・指数平滑）。アプリ内の全RSIはこの関数を通す。"""
+    d = s.diff()
+    gain = d.clip(lower=0).ewm(alpha=1.0/period, adjust=False).mean()
+    loss = (-d.clip(upper=0)).ewm(alpha=1.0/period, adjust=False).mean()
+    return 100 - (100 / (1 + gain / loss))
+
 @st.cache_data(ttl=3600)
 def load_data(ticker, period="5y"):
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
@@ -158,22 +199,10 @@ def load_data(ticker, period="5y"):
     df["sma25"] = df["close"].rolling(25).mean()
     df["sma75"] = df["close"].rolling(75).mean()
     df["sma200"] = df["close"].rolling(200).mean()
-    # ★RSIの計算方式についての注意（2026-08-20記録）
-    # アプリは【単純移動平均方式】(rolling(14).mean())、Colabのバックテスト検証は【Wilder方式】
-    # (指数平滑・ewm(alpha=1/14))を使っている。同じ「RSI(14)」でも値が微妙に異なるため、
-    # 点灯日が1〜2日ずれることがある。RSI≤30は10条件のうち1つなので大底スコアが±1動く程度で、
-    # 実運用の判断（大底9以上で相談）は変わらない。
-    # ★どちらかに揃えるなら影響が大きいので株式部屋で決めること（勝手に変えると過去の検証と接続が切れる）。
-    delta = df["close"].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    df["rsi"] = 100 - (100 / (1 + gain/loss))
+    # RSIはWilder方式（2026-08-22統一・詳細はwilder_rsiのコメント参照）
+    df["rsi"] = wilder_rsi(df["close"])
     wk = df["close"].resample("W-FRI").last().dropna()
-    wd = wk.diff()
-    wg = wd.clip(lower=0).rolling(14).mean()
-    wl = (-wd.clip(upper=0)).rolling(14).mean()
-    w_rsi = 100 - (100 / (1 + wg/wl))
-    df["w_rsi"] = w_rsi.reindex(df.index, method="ffill")
+    df["w_rsi"] = wilder_rsi(wk).reindex(df.index, method="ffill")
     df["bb_mid"] = df["close"].rolling(20).mean()
     bb_std = df["close"].rolling(20).std()
     df["bb_upper"] = df["bb_mid"] + 2*bb_std
@@ -241,17 +270,19 @@ def calc_annual_vol(df):
 
 def check_liquidity(df, ticker):
     """20日平均売買代金が閾値以上か判定。
-    ★2026-08-20修正：閾値が桁違いだった（旧=米国$10億/日・日本¥1億/日）。
-      週次スクリーニングの基準は【米国$7M以上】なので、旧設定は米国で143倍も厳しく、
-      逆に日本は10分の1と甘かった。CPRIの$63M(基準の9倍)が「薄商い」と警告された原因はこれ。
-      新設定=【米国$7M・日本¥10億】でスクリーニング側と一致させる。
+    ★2026-08-22修正（重要）：日本株の閾値を¥10億→【¥1億】へ戻した。
+      8/20に「週次スクリーナーは日米共通$7M＝¥10億相当」という誤った記録に基づいて
+      日本株を¥10億に引き上げてしまったが、スクリーナーの実設定は
+      【米国=時価総額$1B・売買代金$7M／日本=時価総額300億円・売買代金1億円】で日米別基準だった。
+      ¥10億のままだと日本株が軒並み「💧薄商い・ダマシ注意」と誤表示される。米国$7Mは正しいので据え置き。
+      教訓＝設定値は推定で一般化せず、実際の設定画面を確認した値だけを書く。
     戻り値: (売買代金, 閾値以上か, 通貨記号)"""
     try:
         to = df["turnover_ma20"].iloc[-1]
         if pd.isna(to):
             return None, None, ""
         is_jp = (".T" in ticker) or ticker.startswith("^N")
-        thr = 1_000_000_000 if is_jp else 7_000_000
+        thr = 100_000_000 if is_jp else 7_000_000
         sym = "¥" if is_jp else "$"
         return float(to), bool(to >= thr), sym
     except Exception:
@@ -289,6 +320,7 @@ def calc_top_score(r):
 def calc_weekly_bottom_score(df):
     """週足バーで大底10条件を計算（検証2026-07-03：週足<5は足切り・7-8は資金厚めの材料・9は満点警戒）。
     完成した週足バーのみ使用（進行中の週は除外＝ルックアヘッド防止）。上位足チェックは月足RSI≤30。
+    ★RSIはWilder方式（2026-08-22統一）。
     戻り値: (週足スコア, 週足フル判定可能か)"""
     try:
         c = df["close"].resample("W-FRI").last().dropna()
@@ -305,10 +337,7 @@ def calc_weekly_bottom_score(df):
         w = pd.DataFrame({"close": c})
         w["sma25"] = w["close"].rolling(25).mean()
         w["sma200"] = w["close"].rolling(200).mean()
-        d = w["close"].diff()
-        g = d.clip(lower=0).rolling(14).mean()
-        l = (-d.clip(upper=0)).rolling(14).mean()
-        w["rsi"] = 100 - (100/(1+g/l))
+        w["rsi"] = wilder_rsi(w["close"])
         mid = w["close"].rolling(20).mean()
         sd = w["close"].rolling(20).std()
         w["bb_lower"] = mid - 2*sd
@@ -328,11 +357,7 @@ def calc_weekly_bottom_score(df):
         w["wfh"] = wfh
         w["dev"] = (w["close"]-w["sma200"])/w["sma200"]*100
         m = df["close"].resample("ME").last().dropna()
-        md = m.diff()
-        mg = md.clip(lower=0).rolling(14).mean()
-        ml = (-md.clip(upper=0)).rolling(14).mean()
-        m_rsi = (100 - (100/(1+mg/ml))).reindex(w.index, method="ffill")
-        w["m_rsi"] = m_rsi
+        w["m_rsi"] = wilder_rsi(m).reindex(w.index, method="ffill")
         r = w.iloc[-1]
         score = 0
         score += 1 if (pd.notna(r["rsi"]) and r["rsi"] <= 30) else 0
@@ -571,11 +596,9 @@ def calc_ret_6m(df):
 # 強気ダイバージェンス＝株価は安値更新だがRSI(14)は切り上げ かつ RSI<45
 # 検証：月足=勝率79%（超強気の買い場サイン）、日足=勝率74%（補助）。週足は日足と大差なく不採用
 # 重要：「待つサイン」ではなく「もう底・買い場のサイン」
+# ★RSIはWilder方式に統一（2026-08-22）
 def _rsi_series(c, period=14):
-    d = c.diff()
-    g = d.clip(lower=0).rolling(period).mean()
-    l = (-d.clip(upper=0)).rolling(period).mean()
-    return 100 - (100 / (1 + g / l))
+    return wilder_rsi(c, period)
 
 def _detect_divergence(s):
     """直近で強気ダイバージェンスが発生しているか判定。発生していればTrue"""
@@ -651,7 +674,7 @@ def get_vix_level():
 # 🔥確定演出の判定（大底8＋VIX30＋高ボラ）はバケット振り分けの中で直接行っている。
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
-# 母集団70銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
+# 母集団94銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
 # 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
 def _cluster_signals(d, kind="bottom", thr=9, gap=10):
     """点灯日をクラスタ化して「1山＝1イベント」に畳む共通処理。
@@ -689,6 +712,44 @@ def _count_bottom9_clusters(d):
     """その銘柄で大底9以上が過去に何回点灯したかを数える（10営業日以内の連続は1回に集約）。
     検証4「その銘柄で初の大底9か」の自動判定に使う。★数え方は_cluster_signalsに統一済み。"""
     return len(_cluster_signals(d, kind="bottom", thr=9))
+
+# === 🧹 監視リストの棚卸し候補（2026-08-22追加）===
+# 背景：現行ルールには登録の「入口」しかなく「出口」がないため、何を絞っても総数は増え続ける。
+# （8/22に1回で26件を審査＝自分で決めた上限20件を超過。1週で+23なら2ヶ月で250銘柄となり持続不可能）
+# 削除条件は株式部屋の決定＝【半年間まったく大底9が点灯せず、かつ深度が-30%より浅い】。
+# ★この関数は候補を出すだけで削除はしない。実際に外すかは株式部屋で判断する。
+# ★計算コスト対策：まず直近半年だけ走査して足切りし、通過した候補だけ2yの点灯履歴を取る。
+@st.cache_data(ttl=3600)
+def scan_stale_watchlist(days_back=180, dd_thr=-30.0):
+    """棚卸し候補を洗い出す。対象は📁監視のみ（保有・短期戦略・指数は対象外）。
+    戻り値: [(表示名, ticker, 深度%, 最終点灯日), ...] 深度の浅い順"""
+    out = []
+    for label, tk in GROUPS["📁 監視"].items():
+        if tk in EXCLUDED_TICKERS:
+            continue
+        try:
+            d = load_data(tk, "2y")
+            if d is None:
+                continue
+            cutoff = d.index[-1] - pd.Timedelta(days=days_back)
+            recent = d[d.index >= cutoff]
+            lit = False
+            for i in range(len(recent)):
+                if calc_bottom_score(recent.iloc[i])[0] >= 9:
+                    lit = True
+                    break
+            if lit:
+                continue  # 半年以内に点灯があるなら現役
+            dd = float(d["drawdown_pct"].iloc[-1])
+            if dd <= dd_thr:
+                continue  # まだ深い＝地形として生きている
+            hist = _cluster_signals(d, kind="bottom", thr=9)
+            last_lit = hist[-1][0].strftime("%Y-%m-%d") if hist else "2y内で0回"
+            out.append((label.split("（")[0].strip(), tk, dd, last_lit))
+        except Exception:
+            continue
+    out.sort(key=lambda x: -x[2])  # 浅い（=候補として強い）順
+    return out
 
 @st.cache_data(ttl=3600)
 def bulk_signal_row(ticker, period="5y"):
@@ -751,7 +812,7 @@ def _fmt_ws(ws):
     return str(ws)
 
 st.title("📈 大底・天井スコア")
-st.caption("大底10条件・天井9条件 | 買い:スコア9+ 売り:天井8+")
+st.caption("大底10条件・天井9条件 | 買い:スコア9+ 売り:天井8+ | RSI=Wilder方式（2026-08-22統一）")
 
 # === 更新ボタン（放置でフリーズ・文字が白くなる対策）===
 # 押すとキャッシュを全クリアして最新データで再実行する
@@ -763,18 +824,18 @@ with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3。損切りSL-15%固定、利確は値幅段階+100/300/500%(守り銘柄のみTP+50%)、保有は年単位(長いほどEVが高い)。★180日撤退は旧ルールで廃止済み。
 **出口の序列**: 暗号資産系=恩株化(+46%) / 指数優良株=値幅段階利確 / モメンタム柱=日足MA200割れ終値のみ(天井シグナルも利確ラインもなし) / KRUS等チャネル系=地形の上辺で売る。
-**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。
+**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系(NVDA/SOXL/AMD)も1銘柄まで。★6961エンプラス・6787メイコー・6963ロームの半導体系3つも択一。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
 **検証済(対象外)**: SOXL/QS/TSLL/TTDは🔬対象外＝バケットの件数と一括出力に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で登録目的は$7割れの検知のみ。TTD=バリュエーション・リセット型（PER297倍→17倍の縮小がそのまま-89%の株価下落に一致）で大底スコアが効かないと決着済み・観察はEPSと月足downの2点のみ。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
-**🆕銘柄**: 2026-08-15の週次スクリーニング通過組。プール入場審査は通過済みだが実弾は点灯待ち。
-**ボーナス資金**: 指数9/10+の歴史的局面のみ。投信積立は不変、追加資金は暗号資産以外(XLE/EWZ/SLV/AMD等)優先。
+**🆕銘柄**: 2026-08-22の週次スクリーニング通過組（23件）。プール入場審査は通過済みだが実弾は点灯待ち。★消費関連(FLO/GAP/WING/GME/NKE/ONON/ZTS/POST/PPC)が過密＝VIX30時に「分散したつもりで全部消費」に注意。★建設3件(1801/1893/1835)は8/19の金利上昇によるセクター売りで同時点灯。★GAPは2026-08-27が決算＝点灯しても決算当日は買わない。
+**週次スクリーナー条件(2026-08-22改定)**: RSI(14)31〜45 / 52週高値から【-45%以上】/ MA200乖離-15%以下 / 米国=時価総額$1B・売買代金$7M / 日本=時価総額300億円・売買代金1億円。深度を-30%→-45%に締めたのは-50〜-30%が3年到達率17.3%の最弱帯だったため。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
 
-with st.spinner("登録銘柄をスキャン中（初回は35秒ほど）..."):
+with st.spinner("登録銘柄をスキャン中（初回は45秒ほど）..."):
     scan, scan_meta = scan_all()
 
 # === データの鮮度表示（2026-08-18追加）===
@@ -799,7 +860,7 @@ if _hm >= 22 * 60 + 30 or _hm < 5 * 60:
                "今まさに動いている値動きは反映されていないのだ。判断は米国の引け後（日本時間の朝）に行うのだ")
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
-# 背景：母集団70銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
+# 背景：母集団94銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
 # よって点灯を「一覧」でなく「スコア別の束」にした。点灯銘柄は該当バケットに自動で積まれるので
 # 枠を作る作業は不要（VIX30で30件来たら大底9の枠が伸びるだけ）。
 # 旧「ここぞアラート枠」と「通常点灯枠」で同じ銘柄を2箇所に出していた二重表示はこれで解消。
@@ -1140,6 +1201,27 @@ with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井
         else:
             st.caption("該当なしなのだ。")
 
+# === 🧹 棚卸し候補（監視リストの出口・月1回チェック用）===
+# 登録の入口しかないと監視は増え続ける。月1回ここを開いて外す候補を洗い出す運用。
+# 判定は重いので必ずボタンを押した時だけ走らせる（毎回の起動を遅くしない）。
+with st.expander("🧹 棚卸し候補（半年点灯なし＋深度-30%より浅い監視銘柄）"):
+    st.caption("削除条件＝**半年間まったく大底9が点灯せず、かつ深度が-30%より浅い**。"
+               "候補を出すだけで自動削除はしないのだ。外すかどうかは株式部屋で決めるのだ。")
+    if st.button("🧹 棚卸し候補を洗い出す", use_container_width=True, key="stale_go"):
+        st.session_state["stale_ready"] = True
+    if st.session_state.get("stale_ready"):
+        with st.spinner("監視銘柄を判定中（1〜2分かかることがあるのだ）..."):
+            _stale = scan_stale_watchlist()
+        if not _stale:
+            st.success("✅ 棚卸し候補はなしなのだ。監視リストは全部まだ現役なのだ")
+        else:
+            st.warning(f"⚠️ 棚卸し候補が{len(_stale)}件あるのだ（深度の浅い順）")
+            _lines = ["| 銘柄 | ティッカー | 深度 | 大底9の最終点灯 |", "|---|---|---|---|"]
+            for _nm, _tk, _dd, _last in _stale:
+                _lines.append(f"| {_nm} | {_tk} | {_dd:.1f}% | {_last} |")
+            st.code("\n".join(_lines), language=None)
+            st.caption("そのまま株式部屋に貼れるのだ。深度が浅いほど「もう底ではない＝役目を終えた」候補なのだ")
+
 st.divider()
 
 col_g, col_t = st.columns([1,2])
@@ -1389,7 +1471,7 @@ with st.expander("📄 コピー用サマリー（Claude相談用・タップで
     _summary = f"""【{ticker}】{df.index[-1].strftime('%Y-%m-%d')}
 株価: {symbol}{_p:,.2f}（{change:+,.2f} / {change_pct:+.2f}%）
 PER: {_per_txt} ｜ PBR: {_pbr_txt}
---- スコア ---
+--- スコア（RSIはWilder方式・2026-08-22統一）---
 大底スコア: {bottom_score}/10
 天井スコア: {top_score}/9
 週足スコア: {_wtxt}
@@ -1438,10 +1520,7 @@ def make_chart_frame(df, tf):
     cd["sma25"] = cd["close"].rolling(25).mean()
     cd["sma75"] = cd["close"].rolling(75).mean()
     cd["sma200"] = cd["close"].rolling(200).mean()
-    delta = cd["close"].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    cd["rsi"] = 100 - (100/(1+gain/loss))
+    cd["rsi"] = wilder_rsi(cd["close"])  # チャートのRSIもWilder方式に統一（2026-08-22）
     cd["bb_mid"] = cd["close"].rolling(20).mean()
     s = cd["close"].rolling(20).std()
     cd["bb_upper"] = cd["bb_mid"] + 2*s
@@ -1573,4 +1652,4 @@ st.plotly_chart(fig, use_container_width=True,
             "displaylogo": False,
             "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
 
-st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い＋SL-15%＋値幅段階利確+100/300/500%・保有は年単位（全237取引 勝率30% EV+30%）")
+st.caption(f"出典: yfinance | データ最終日: {df.index[-1].strftime('%Y-%m-%d')} | RSI=Wilder方式(2026-08-22統一) | スコアは常に日足データで計算（チャート時間軸とは独立）| 出口: 3分割買い＋SL-15%＋値幅段階利確+100/300/500%・保有は年単位（全237取引 勝率30% EV+30%）")
