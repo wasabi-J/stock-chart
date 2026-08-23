@@ -166,7 +166,11 @@ MOMENTUM_HELD = {
 # 検証していない「ギリギリの点灯」を余分に拾っていた可能性が高い（限界的な点灯＝最も弱い打席）。
 # ★切替後は点灯が【減る】のが正常。増えたら実装ミスを疑うこと。
 # ★保有銘柄（CPRI/ローム）はエントリー根拠の再判定をしない。出口ルールで管理済み。
-# ★楽天証券のRSIとの境界付近の差は当日ザラ場の扱いの差であり、境界付近は楽天を正とする運用は不変。
+# ★★権威の序列（2026-08-22に訂正）：①Colabのバックテスト（Wilder方式）が正 ②アプリはそれに揃える
+#   ③楽天は【参考値】であり、ズレてもアプリが誤りとは限らない。
+#   旧ルール「楽天とズレたら楽天を正とする」は無効。理由＝楽天にはRSI1（Wilder系）とRSI2（Cutler系）の
+#   2種類があり、iSPEEDがどちらを表示しているか不明。さらに期間デフォルトが14でなく9のケースがある。
+#   方式も期間も特定できない相手を「正」には据えられない。検算は下の🔍RSI検算パネルで自己完結させる。
 def wilder_rsi(s, period=14):
     """Wilder方式のRSI（平滑化係数1/period・指数平滑）。アプリ内の全RSIはこの関数を通す。"""
     d = s.diff()
@@ -1402,6 +1406,86 @@ with st.expander("📋 スコア詳細（タップで開閉）", expanded=False)
         st.markdown(f"**天井スコア {top_score}/9**")
         for label, ok, detail in top_checks:
             st.markdown(f"{'✅' if ok else '❌'} {label}　{detail}")
+
+# === 🔍 RSI検算パネル（2026-08-22追加）===
+# 目的＝【アプリの実装が正しいかをアプリ単体で証明できるようにする】。
+# 楽天と見比べても楽天側の方式（RSI1=Wilder系/RSI2=Cutler系）と期間（9 or 14）が特定できないため、
+# 外部との突き合わせでは切り分けにならない。そこで生の終値から手計算した値を並べて出す。
+# 判定：手計算とアプリ表示が一致すれば実装は正しく、楽天との差は「方式差」で説明がついたことになる。
+#      一致しなければアプリのバグ。
+def _textbook_wilder_rsi(s, period=14):
+    """教科書どおりのWilder RSI（最初のperiod本はSMAで種を作り、以降を平滑化）。
+    アプリ本体のwilder_rsi()はewm(adjust=False)で最初の1本から平滑化を始める簡略版のため、
+    両者を並べて出して差が実務上ゼロに収束していることを確認する。"""
+    d = s.diff().dropna()
+    if len(d) < period + 1:
+        return None
+    up = d.clip(lower=0)
+    dn = -d.clip(upper=0)
+    ag = float(up.iloc[:period].mean())
+    al = float(dn.iloc[:period].mean())
+    for i in range(period, len(d)):
+        ag = (ag * (period - 1) + float(up.iloc[i])) / period
+        al = (al * (period - 1) + float(dn.iloc[i])) / period
+    if al == 0:
+        return 100.0
+    return 100 - 100 / (1 + ag / al)
+
+with st.expander("🔍 RSI検算パネル（Wilder実装の自己検証・タップで開く）", expanded=False):
+    st.caption("アプリの表示値と、生の終値から手計算した値を突き合わせるのだ。"
+               "**一致＝実装は正しい**（楽天との差は方式差で説明がつく）。**不一致＝アプリのバグ**なのだ。")
+
+    # --- 日足 ---
+    _tb_d = _textbook_wilder_rsi(df["close"])
+    _ew_d = float(wilder_rsi(df["close"]).iloc[-1])
+    _dc1, _dc2, _dc3 = st.columns(3)
+    _dc1.metric("日足RSI（アプリ表示）", f"{float(latest['rsi']):.2f}")
+    _dc2.metric("ewm簡略版（実装と同一）", f"{_ew_d:.2f}")
+    _dc3.metric("教科書版Wilder", f"{_tb_d:.2f}" if _tb_d is not None else "-")
+    if _tb_d is not None and abs(_tb_d - float(latest["rsi"])) < 0.5:
+        st.success(f"✅ 日足は一致なのだ（差 {abs(_tb_d - float(latest['rsi'])):.3f}pt）。実装は正しいのだ")
+    elif _tb_d is not None:
+        st.error(f"🚨 日足が {abs(_tb_d - float(latest['rsi'])):.2f}pt ズレているのだ。実装を疑うのだ")
+
+    # --- 週足（★JST変更の影響を切り分ける枠）---
+    # 2026-08-21に週足バーの進行中判定をUTC→JSTへ変えた。これは【直前に完成した金曜バーを
+    # 週足スコアに含めるかどうか】を変える変更である。
+    # UTC時代：日本時間の土曜朝に開くとUTCではまだ金曜のため、完成済みの金曜バーを
+    #          「進行中」と誤判定して捨てていた＝1週間古いデータで週足を計算していた。
+    # JST後　：完成した金曜バーが正しく入る。つまり週足の値が変わるのは【仕様どおり】なのだ。
+    _wk = df["close"].resample("W-FRI").last().dropna()
+    _in_prog = _wk.index[-1].normalize() >= pd.Timestamp(datetime.now(JST).date())
+    _wk_done = _wk.iloc[:-1] if _in_prog else _wk
+    _wk_all_rsi = float(wilder_rsi(_wk).iloc[-1])
+    _wk_done_rsi = float(wilder_rsi(_wk_done).iloc[-1]) if len(_wk_done) > 15 else None
+    _wc1, _wc2, _wc3 = st.columns(3)
+    _wc1.metric("週足RSI（アプリ上部の表示）", f"{float(latest['w_rsi']):.2f}" if pd.notna(latest["w_rsi"]) else "-")
+    _wc2.metric("進行中の週を含む", f"{_wk_all_rsi:.2f}")
+    _wc3.metric("完成週のみ", f"{_wk_done_rsi:.2f}" if _wk_done_rsi is not None else "-")
+    st.caption(f"最新の週足バー {_wk.index[-1].strftime('%Y-%m-%d')} は "
+               f"{'**進行中（週足スコアからは除外）**' if _in_prog else '**完成済み（週足スコアに算入）**'} なのだ")
+
+    # ★既知の不整合をここで可視化する（黙って直さない）
+    if _wk_done_rsi is not None and abs(_wk_all_rsi - _wk_done_rsi) >= 1.0:
+        st.warning(
+            "⚠️ **要判断の不整合なのだ**：画面上部の「週足RSI」と大底スコアの条件『週足RSI≤30』は"
+            f"**進行中の週を含む値（{_wk_all_rsi:.2f}）**を使っているのに対し、"
+            f"週足スコア10条件は**完成週のみの値（{_wk_done_rsi:.2f}）**を使っているのだ。"
+            "今は差が{:.2f}ptあるのだ。どちらに揃えるかは**株式部屋の判断**なので勝手には直さないのだ"
+            "（大底スコアが±1動く＝点灯の有無が変わる変更だからなのだ）。".format(abs(_wk_all_rsi - _wk_done_rsi)))
+
+    # --- 生データ（手で検算したい時・Claudeに貼りたい時用）---
+    _tail = df[["close"]].tail(16).copy()
+    _tail["日足RSI"] = df["rsi"].tail(16)
+    _lines = ["日付        終値        日足RSI"]
+    for _ix, _rw in _tail.iterrows():
+        _lines.append(f"{_ix.strftime('%Y-%m-%d')}  {_rw['close']:>10,.2f}  {_rw['日足RSI']:>7.2f}")
+    _lines.append("")
+    _lines.append("週足バー（直近6本）")
+    for _ix, _v in _wk.tail(6).items():
+        _lines.append(f"{_ix.strftime('%Y-%m-%d')}  {_v:>10,.2f}")
+    st.code("\n".join(_lines), language=None)
+    st.caption("この生データをClaudeに貼れば、こちらでも同じ計算をして突き合わせられるのだ。")
 
 # === 過去のシグナル点灯日を計算（クラスタリングで1山1マーカー）===
 # ※コピー用サマリーでも点灯履歴を使うため、チャートより手前で計算しておく
