@@ -178,6 +178,26 @@ def wilder_rsi(s, period=14):
     loss = (-d.clip(upper=0)).ewm(alpha=1.0/period, adjust=False).mean()
     return 100 - (100 / (1 + gain / loss))
 
+def completed_weekly_closes(s):
+    """週足の終値系列を返す。★進行中の週は必ず落とす（2026-08-22に定義を統一）。
+    【「完成週」の定義＝その週の最終取引日の引けが済んでいること。カレンダー週ではない】
+      ・土日 → 直前の金曜バーは完成済みなので【含める】
+      ・月〜金の取引時間中 → 当該週はまだ動くので【除外し、前週の確定バーを使う】
+    カレンダー週（日曜まで）で判定すると土曜朝に当該週が未完成扱いとなり、
+    完成済みの金曜バーを捨てて1週間古いデータで週足を計算してしまう（UTC時代のバグの正体）。
+    ★この関数を作った理由＝同じ「週足RSI」が2つの値を持っていたため。
+      旧実装ではload_data側（画面表示＋大底スコアの条件『週足RSI≤30』）が進行中の週を含み、
+      週足スコア10条件は完成週のみで計算していた。わさびが点灯相談をするのは平日の朝
+      （米国引け後）であり、その時間帯は進行中の週が月曜1日分だけで週足バーを作るため値が最も歪む。
+      つまり【危ない時間帯に危ない値が使われる】設計だった。土日は3値が一致するので問題が見えないだけ。
+    """
+    c = s.resample("W-FRI").last().dropna()
+    if len(c) == 0:
+        return c
+    if c.index[-1].normalize() >= pd.Timestamp(datetime.now(JST).date()):
+        c = c.iloc[:-1]
+    return c
+
 @st.cache_data(ttl=3600)
 def load_data(ticker, period="5y"):
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
@@ -205,7 +225,9 @@ def load_data(ticker, period="5y"):
     df["sma200"] = df["close"].rolling(200).mean()
     # RSIはWilder方式（2026-08-22統一・詳細はwilder_rsiのコメント参照）
     df["rsi"] = wilder_rsi(df["close"])
-    wk = df["close"].resample("W-FRI").last().dropna()
+    # 週足RSI＝【完成週のみ】で計算する（2026-08-22統一）。
+    # この値は画面上部の表示と、大底スコアの条件『週足RSI≤30』の両方に使われる。
+    wk = completed_weekly_closes(df["close"])
     df["w_rsi"] = wilder_rsi(wk).reindex(df.index, method="ffill")
     df["bb_mid"] = df["close"].rolling(20).mean()
     bb_std = df["close"].rolling(20).std()
@@ -327,15 +349,9 @@ def calc_weekly_bottom_score(df):
     ★RSIはWilder方式（2026-08-22統一）。
     戻り値: (週足スコア, 週足フル判定可能か)"""
     try:
-        c = df["close"].resample("W-FRI").last().dropna()
-        if len(c) < 60:
-            return None, False
-        # 進行中の週を除外（最新バーの金曜が未来or今日なら落とす）
-        # ★JSTで判定する。pd.Timestamp.now()はStreamlit CloudではUTCを返すため、
-        #   日本時間の朝に日付が1日ずれて進行中バーの除外を誤る可能性がある。
-        last_fri = c.index[-1]
-        if last_fri.normalize() >= pd.Timestamp(datetime.now(JST).date()):
-            c = c.iloc[:-1]
+        # ★完成週の判定はcompleted_weekly_closes()に一本化（2026-08-22）。
+        #   load_data側の週足RSIと同じ系列を見るので、同じ「週足RSI」が2つの値を持つ状態は解消済み。
+        c = completed_weekly_closes(df["close"])
         if len(c) < 60:
             return None, False
         w = pd.DataFrame({"close": c})
@@ -1447,32 +1463,33 @@ with st.expander("🔍 RSI検算パネル（Wilder実装の自己検証・タッ
     elif _tb_d is not None:
         st.error(f"🚨 日足が {abs(_tb_d - float(latest['rsi'])):.2f}pt ズレているのだ。実装を疑うのだ")
 
-    # --- 週足（★JST変更の影響を切り分ける枠）---
-    # 2026-08-21に週足バーの進行中判定をUTC→JSTへ変えた。これは【直前に完成した金曜バーを
-    # 週足スコアに含めるかどうか】を変える変更である。
-    # UTC時代：日本時間の土曜朝に開くとUTCではまだ金曜のため、完成済みの金曜バーを
-    #          「進行中」と誤判定して捨てていた＝1週間古いデータで週足を計算していた。
-    # JST後　：完成した金曜バーが正しく入る。つまり週足の値が変わるのは【仕様どおり】なのだ。
-    _wk = df["close"].resample("W-FRI").last().dropna()
-    _in_prog = _wk.index[-1].normalize() >= pd.Timestamp(datetime.now(JST).date())
-    _wk_done = _wk.iloc[:-1] if _in_prog else _wk
-    _wk_all_rsi = float(wilder_rsi(_wk).iloc[-1])
+    # --- 週足（★2026-08-22に定義を【完成週のみ】へ統一）---
+    # 8/21の「週足バー判定をUTC→JST」の変更はバグではなく修正だった。
+    # UTC時代は日本時間の土曜朝に開くとUTC上はまだ金曜のため、完成済みの金曜バーを
+    # 「進行中」と誤判定して捨てていた＝週足スコアを1週間古いデータで計算していた。
+    # 日足と方向が逆に動いたのは、日足がWilder化のみ・週足はWilder化＋参照バーが1本増えるという
+    # 二重の変更を受けていたため。
+    _wk_raw = df["close"].resample("W-FRI").last().dropna()
+    _wk_done = completed_weekly_closes(df["close"])
+    _in_prog = len(_wk_done) < len(_wk_raw)
+    _wk_all_rsi = float(wilder_rsi(_wk_raw).iloc[-1])
     _wk_done_rsi = float(wilder_rsi(_wk_done).iloc[-1]) if len(_wk_done) > 15 else None
     _wc1, _wc2, _wc3 = st.columns(3)
-    _wc1.metric("週足RSI（アプリ上部の表示）", f"{float(latest['w_rsi']):.2f}" if pd.notna(latest["w_rsi"]) else "-")
-    _wc2.metric("進行中の週を含む", f"{_wk_all_rsi:.2f}")
-    _wc3.metric("完成週のみ", f"{_wk_done_rsi:.2f}" if _wk_done_rsi is not None else "-")
-    st.caption(f"最新の週足バー {_wk.index[-1].strftime('%Y-%m-%d')} は "
-               f"{'**進行中（週足スコアからは除外）**' if _in_prog else '**完成済み（週足スコアに算入）**'} なのだ")
+    _wc1.metric("週足RSI（アプリ表示・統一後）", f"{float(latest['w_rsi']):.2f}" if pd.notna(latest["w_rsi"]) else "-")
+    _wc2.metric("完成週のみ（=正）", f"{_wk_done_rsi:.2f}" if _wk_done_rsi is not None else "-")
+    _wc3.metric("進行中の週を含む（旧・参考）", f"{_wk_all_rsi:.2f}")
+    st.caption(f"最新の週足バー {_wk_raw.index[-1].strftime('%Y-%m-%d')} は "
+               f"{'**進行中（除外中）→ 使うのは前週の確定バー**' if _in_prog else '**完成済み（算入中）**'} なのだ。"
+               "完成の定義は『その週の最終取引日の引けが済んでいるか』であってカレンダー週ではないのだ")
 
-    # ★既知の不整合をここで可視化する（黙って直さない）
-    if _wk_done_rsi is not None and abs(_wk_all_rsi - _wk_done_rsi) >= 1.0:
-        st.warning(
-            "⚠️ **要判断の不整合なのだ**：画面上部の「週足RSI」と大底スコアの条件『週足RSI≤30』は"
-            f"**進行中の週を含む値（{_wk_all_rsi:.2f}）**を使っているのに対し、"
-            f"週足スコア10条件は**完成週のみの値（{_wk_done_rsi:.2f}）**を使っているのだ。"
-            "今は差が{:.2f}ptあるのだ。どちらに揃えるかは**株式部屋の判断**なので勝手には直さないのだ"
-            "（大底スコアが±1動く＝点灯の有無が変わる変更だからなのだ）。".format(abs(_wk_all_rsi - _wk_done_rsi)))
+    # 統一が効いているかの自己検査（画面表示・大底スコアの条件・週足スコアが同じ系列を見ているか）
+    if _wk_done_rsi is not None and pd.notna(latest["w_rsi"]):
+        _gap = abs(_wk_done_rsi - float(latest["w_rsi"]))
+        if _gap < 0.01:
+            st.success(f"✅ 週足も一致なのだ（差 {_gap:.4f}pt）。画面表示・大底スコアの『週足RSI≤30』・"
+                       "週足スコアの3つが同じ完成週の系列を見ているのだ")
+        else:
+            st.error(f"🚨 週足が {_gap:.2f}pt ズレているのだ。定義統一が効いていない＝実装ミスの合図なのだ")
 
     # --- 生データ（手で検算したい時・Claudeに貼りたい時用）---
     _tail = df[["close"]].tail(16).copy()
