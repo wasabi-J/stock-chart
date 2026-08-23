@@ -1499,7 +1499,7 @@ with st.expander("🔍 RSI検算パネル（Wilder実装の自己検証・タッ
         _lines.append(f"{_ix.strftime('%Y-%m-%d')}  {_rw['close']:>10,.2f}  {_rw['日足RSI']:>7.2f}")
     _lines.append("")
     _lines.append("週足バー（直近6本）")
-    for _ix, _v in _wk.tail(6).items():
+    for _ix, _v in _wk_raw.tail(6).items():
         _lines.append(f"{_ix.strftime('%Y-%m-%d')}  {_v:>10,.2f}")
     st.code("\n".join(_lines), language=None)
     st.caption("この生データをClaudeに貼れば、こちらでも同じ計算をして突き合わせられるのだ。")
