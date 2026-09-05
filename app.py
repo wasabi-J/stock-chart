@@ -129,13 +129,24 @@ GROUPS = {
         # ★落第4件は全て赤字（EOSE／OKLO／OPEN／QXO）。
         # ★BLDRは会計上は赤字だがIRS和解の一時費用によるもので営業利益は黒字→通過。
         #   「一時費用による赤字」と「本業の赤字」の線引きの実例なのだ（QXOは本業の赤字で落第）。
-        "APP（アップラビン・広告テック）🆕": "APP",
-        "BLDR（ビルダーズFirstSource・建材流通）🆕": "BLDR",
-        "PNR（ペンテア・水処理）🆕": "PNR",
-        "TRIP（トリップアドバイザー）🆕": "TRIP",
-        "WD（ウォーカー&ダンロップ・商業不動産金融）🆕": "WD",
-        "8267（イオン）🆕": "8267.T",
-        "9412（スカパーJSAT）🆕": "9412.T",
+        "APP（アップラビン・広告テック）": "APP",
+        "BLDR（ビルダーズFirstSource・建材流通）": "BLDR",
+        "PNR（ペンテア・水処理）": "PNR",
+        "TRIP（トリップアドバイザー）": "TRIP",
+        "WD（ウォーカー&ダンロップ・商業不動産金融）": "WD",
+        "8267（イオン）": "8267.T",
+        "9412（スカパーJSAT）": "9412.T",
+        # --- 2026-09-05 週次スクリーニングv2 審査通過（米国株4・日本株3）---
+        # ★塊の確認：AAONは空調でLII（レノックス）と同じ塊＝買うなら択一。
+        #   6366千代田化工はプラントエンジでACM/AMTM/1801/1835/1893の建設塊に合流。
+        #   LULUは消費関連塊（NKE/ONON/GAP等）に合流。TMEは中国ADRでBABAと同じ塊。
+        "AAON（エーオン・空調機器）🆕": "AAON",
+        "FICO（フェアアイザック・信用スコア）🆕": "FICO",
+        "LULU（ルルレモン・アパレル）🆕": "LULU",
+        "TME（テンセントミュージック・中国ADR）🆕": "TME",
+        "3110（日東紡績・ガラス繊維）🆕": "3110.T",
+        "4516（日本新薬・医薬品）🆕": "4516.T",
+        "6366（千代田化工建設・プラントエンジ）🆕": "6366.T",
     },
     "📁 指数・コモディティ": {
         "BTC（ビットコイン）": "BTC-USD",
@@ -167,6 +178,23 @@ for _gname in list(GROUPS.keys()):
     if _gname in _NO_SORT_GROUPS:
         continue
     GROUPS[_gname] = dict(sorted(GROUPS[_gname].items(), key=lambda kv: _name_sort_key(kv[1])))
+
+# === 📁監視を米国株・日本株に分割（2026-08-29・TODO④）===
+# 監視が96件に増え、1つのラジオボタンでは縦に長すぎて目的の銘柄に辿り着けなくなったため。
+# ★辞書リテラル自体は1つのまま持ち、ここで機械的に割る。リテラルを2つに割ると銘柄追加のたびに
+#   「どっちに入れるか」を人間が判断することになり、入れ間違いと重複の温床になる。
+#   分割の基準はティッカーの.Tサフィックスだけなので、追加時は今までどおり📁監視に足せばよい。
+# ★件数をグループ名に埋めるので、追加すれば表示も自動で追随する。
+_watch = GROUPS.pop("📁 監視")
+_watch_us = {k: v for k, v in _watch.items() if not v.endswith(".T")}
+_watch_jp = {k: v for k, v in _watch.items() if v.endswith(".T")}
+_reordered = {}
+for _k, _v in GROUPS.items():
+    _reordered[_k] = _v
+    if _k == "📁 短期戦略":  # 監視は短期戦略の直後に戻す（元の並び順を保つ）
+        _reordered[f"📁 監視・米国株（{len(_watch_us)}）"] = _watch_us
+        _reordered[f"📁 監視・日本株（{len(_watch_jp)}）"] = _watch_jp
+GROUPS = _reordered
 
 ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
 
@@ -521,30 +549,46 @@ def scan_full_history(days_back=365):
 @st.cache_data(ttl=3600)
 def scan_momentum():
     """全登録銘柄のモメンタム判定を集計。判定に必要なのは6ヶ月上昇率とMA200のみなので
-    2yデータで十分（maxと結果は完全同一・速度のみ向上）。
-    戻り値: (買いリスト, 売りリスト)。各要素=(label, ticker, 6ヶ月上昇率, is_held)"""
+    直近200日あれば足りる。
+    ★2026-08-29修正1（TODO③）：EXCLUDED_TICKERSを除外するようにした。
+      旧実装は^VIXと^TNXしか弾いておらず、SOXL/TSLL/1458/2869のレバETFが買い一覧に並んでいた。
+      レバETFは6ヶ月+50%を構造的に達成しやすいので上位を占め、逆張り側のバケットでは
+      除外されているのにモメンタム側だけ素通りという非対称な状態だった。
+      レバETFは日次リバランスのボラ減衰があり「MA200割れまで持つ」出口と噛み合わない。
+    ★2026-08-29修正3：データ期間を2y→5yに変えた。ポップアップ実装で起動時に必ず走るようになったため、
+      scan_all（5y）がダウンロード済みのキャッシュを再利用する必要がある。2yのままだと113銘柄を
+      もう一度落としに行き起動が倍かかる。判定に使うのは直近200日なので結果は完全同一。
+    ★2026-08-29修正2（TODO⑤）：MA200乖離率を戻り値に追加した。
+      入口ルールの②【MA200乖離+18%以内】を画面側で判定するため。
+      検証：乖離+18%以内でEV+23.0%・ペイオフ7.23倍（フィルターなしはEV+19.7%）。
+    戻り値: (買いリスト, 売りリスト)
+      買い=(label, ticker, 6ヶ月上昇率, is_held, MA200乖離率) ※乖離昇順（入口に適した順）
+      売り=(label, ticker, 6ヶ月上昇率, is_held, MA200乖離率) ※保有を先頭"""
     buys, sells = [], []
     for label, tk in ALL_TICKERS:
-        if tk in ("^VIX", "^TNX"):
+        if tk in ("^VIX", "^TNX") or tk in EXCLUDED_TICKERS:
             continue
         try:
-            d = load_data(tk, "2y")
+            d = load_data(tk, "5y")
             if d is None or len(d) < 200:
                 continue
             c = d["close"]
             ma200 = c.rolling(200).mean().iloc[-1]
             price = c.iloc[-1]
-            if pd.isna(ma200) or len(c) < 127:
+            if pd.isna(ma200) or ma200 == 0 or len(c) < 127:
                 continue
             ret_6m = (price - c.iloc[-127]) / c.iloc[-127] * 100
+            dev = (price - ma200) / ma200 * 100
             is_held = tk in HELD_TICKERS
             if ret_6m >= 50 and price > ma200:
-                buys.append((label, tk, ret_6m, is_held))
+                buys.append((label, tk, ret_6m, is_held, dev))
             elif price < ma200:
-                sells.append((label, tk, ret_6m, is_held))
+                sells.append((label, tk, ret_6m, is_held, dev))
         except Exception:
             continue
-    buys.sort(key=lambda x: -x[2])          # 上昇率の高い順
+    # ★並び順は【MA200乖離の小さい順】。上昇率降順にしないのは、上昇率が高い銘柄ほど
+    #   MA200から離れており入口として不適だから（一番上に一番買ってはいけないものが来る）。
+    buys.sort(key=lambda x: x[4])
     sells.sort(key=lambda x: (not x[3]))    # 保有を先頭に
     return buys, sells
 
@@ -730,7 +774,7 @@ def get_vix_level():
 # 🔥確定演出の判定（大底8＋VIX30＋高ボラ）はバケット振り分けの中で直接行っている。
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
-# 母集団113銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
+# 母集団120銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
 # 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
 def _cluster_signals(d, kind="bottom", thr=9, gap=10):
     """点灯日をクラスタ化して「1山＝1イベント」に畳む共通処理。
@@ -850,13 +894,13 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
-**🆕銘柄**: 2026-08-29の週次スクリーニング通過組（7件）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDRはIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
-**同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP　②建材・住宅関連=BLDR/SITE/LII/PNR/1801/1835/1893　③コモディティ=GLD/SLV/COPX。VIX30では塊ごと同時点灯するので、1つの塊から取るのは1銘柄までにするのだ。
+**🆕銘柄**: 2026-09-05の週次スクリーニング通過組（7件）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDR（8/29組）はIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
+**同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP/LULU　②建材・住宅・建設=BLDR/SITE/LII/PNR/AAON/ACM/AMTM/1801/1835/1893/6366　③コモディティ=GLD/SLV/COPX　④中国ADR=BABA/TME。★空調はLIIとAAONが直接competitorなので特に択一。VIX30では塊ごと同時点灯するので、1つの塊から取るのは1銘柄までにするのだ。
 **週次スクリーナー条件(2026-08-22改定)**: RSI(14)31〜45 / 52週高値から【-45%以上】/ MA200乖離-15%以下 / 米国=時価総額$1B・売買代金$7M / 日本=時価総額300億円・売買代金1億円。深度を-30%→-45%に締めたのは-50〜-30%が3年到達率17.3%の最弱帯だったため。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
 
-with st.spinner("登録銘柄をスキャン中（初回は60秒ほど）..."):
+with st.spinner("登録銘柄をスキャン中（初回は65秒ほど）..."):
     scan, scan_meta = scan_all()
 
 # === データの鮮度表示（2026-08-18追加）===
@@ -881,7 +925,7 @@ if _hm >= 22 * 60 + 30 or _hm < 5 * 60:
                "今まさに動いている値動きは反映されていないのだ。判断は米国の引け後（日本時間の朝）に行うのだ")
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
-# 背景：母集団113銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
+# 背景：母集団120銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
 # よって点灯を「一覧」でなく「スコア別の束」にした。点灯銘柄は該当バケットに自動で積まれるので
 # 枠を作る作業は不要（VIX30で30件来たら大底9の枠が伸びるだけ）。
 # 旧「ここぞアラート枠」と「通常点灯枠」で同じ銘柄を2箇所に出していた二重表示はこれで解消。
@@ -894,6 +938,12 @@ _FONT_CSS = """<style>
 .kakutei-bdy{font-size:12px;line-height:1.45;color:#ffd8d8;}
 .kakutei-ev{color:#ffd040;}
 .held-tag{background:#1a4a2a;color:#5fe;font-size:10px;padding:0 5px;border-radius:3px;margin-right:4px;}
+.mom-box{background:linear-gradient(135deg,#0a2a1a,#10502e);border:1.5px solid #34d399;
+ border-radius:9px;padding:9px 12px;margin-bottom:6px;box-shadow:0 0 10px rgba(52,211,153,0.35);
+ font-family:'Mochiy Pop One',sans-serif;}
+.mom-ttl{font-size:16px;color:#fff;text-shadow:0 0 6px #34d399;margin-bottom:3px;}
+.mom-bdy{font-size:12px;line-height:1.45;color:#d8ffe8;}
+.mom-ev{color:#ffd040;}
 </style>"""
 
 _vix_now = get_vix_level()
@@ -993,6 +1043,28 @@ if _excluded_lit:
             st.markdown(_render_row(r))
         st.caption("SOXLはVIX≥25限定で検討可・QSとTSLLとTTDは買い判断に使わないのだ"
                    "（TSLLは$7割れの検知用／TTDはバリュエーション・リセット型で大底スコアが効かないと決着済み）")
+
+# === 🚀 モメンタム買いシグナルのポップアップ（2026-08-29追加・TODO②⑤）===
+# 逆張り柱は大底バケットで毎朝目に入るのに、モメンタム柱は折りたたみの中にあり
+# 「開かなければ気づかない」状態だった。柱が2本ある以上、点灯の可視性も2本とも同じにする。
+# ★ここに出すのは【入口ルール②MA200乖離+18%以内】を満たすものだけ。
+#   検証：乖離+18%以内でEV+23.0%・ペイオフ7.23倍（フィルターなしはEV+19.7%）。
+#   +18%を超えたものは折りたたみの一覧には残るが、ポップアップでは呼ばない
+#   （名前を毎朝見せられると「そろそろ押した頃では」と手が出るため＝感情トレードの型②）。
+_mom_buys_top, _mom_sells_top = scan_momentum()
+_mom_ok = [b for b in _mom_buys_top if b[4] <= 18 and not b[3]]
+if _mom_ok:
+    _mp = [_FONT_CSS]
+    for _lb, _mtk2, _r6, _hd, _dev in _mom_ok[:5]:
+        _mp.append(
+            f'<div class="mom-box"><div class="mom-ttl">🚀 モメンタム買い点灯：{_lb.split("（")[0].strip()}</div>'
+            f'<div class="mom-bdy">6ヶ月 <b>{_r6:+.0f}%</b>　MA200乖離 <b>{_dev:+.1f}%</b> ✅+18%以内　'
+            f'<span class="mom-ev">検証EV+23.0%・ペイオフ7.23倍</span></div></div>')
+    st.markdown("".join(_mp), unsafe_allow_html=True)
+    st.toast(f"🚀 モメンタム買い点灯（適格{len(_mom_ok)}件）", icon="🚀")
+    st.caption("※買う前に残りの入口ルールを確認するのだ：③黒字　④集中ルール非抵触　⑤決算をまたがない　"
+               "⑥終値ベース　⑦1銘柄¥1〜2万（Tier C）　⑧同時保有2銘柄まで。"
+               "中央値はほぼゼロで利益は右の裾から来るホームラン型なのだ")
 
 # --- ⛔天井シグナル（保有銘柄でのみ意味を持つ）---
 _tops = []
@@ -1174,22 +1246,28 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
 with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜買い=6ヶ月+50%かつMA200上／売り=MA200割れ）"):
     with st.spinner("モメンタム判定中..."):
         mom_buys, mom_sells = scan_momentum()
-    st.markdown("#### 🚀 モメンタム買い点灯中")
+    st.markdown("#### 🚀 モメンタム買い点灯中（MA200乖離の小さい順）")
     if mom_buys:
-        for label, tk, r6, is_held in mom_buys:
+        for label, tk, r6, is_held, dev in mom_buys:
             hm = "【保有】" if is_held else ""
-            st.markdown(f"- {hm}**{label}**　6ヶ月 **{r6:+.0f}%**　（MA200上）")
-        st.caption("3銘柄分散・1銘柄約3万円で検討。買う買わないは都度判断。")
+            # ★入口ルール②＝MA200乖離+18%以内（EV+23.0%・ペイオフ7.23倍）。
+            #   超過は「上昇率が高い＝良い」ではなく【伸びきっていて入口に適さない】の意味なのだ。
+            mk = "✅+18%以内" if dev <= 18 else "⚠️+18%超（入口不適）"
+            st.markdown(f"- {hm}**{label}**　6ヶ月 **{r6:+.0f}%**　MA200乖離 **{dev:+.1f}%**　{mk}")
+        _n_ok = sum(1 for b in mom_buys if b[4] <= 18)
+        st.caption(f"✅適格{_n_ok}件／⚠️不適{len(mom_buys)-_n_ok}件。"
+                   "1銘柄¥1〜2万（Tier C）・同時保有2銘柄まで・黒字・集中ルール非抵触・決算をまたがない、が入口ルールなのだ。"
+                   "🔬対象外（レバETF等）はこの一覧から除外済みなのだ")
     else:
         st.caption("モメンタム買いの点灯はなしなのだ。")
     st.markdown("#### 📉 モメンタム売り点灯中（MA200割れ＝トレンド終了）")
     if mom_sells:
-        for label, tk, r6, is_held in mom_sells:
+        for label, tk, r6, is_held, dev in mom_sells:
             hm = "【保有】" if is_held else ""
             if is_held:
-                st.error(f"{hm}**{label}**　6ヶ月 {r6:+.0f}%　→ モメンタム保有なら売り検討")
+                st.error(f"{hm}**{label}**　6ヶ月 {r6:+.0f}%　MA200乖離 {dev:+.1f}%　→ モメンタム保有なら売り検討")
             else:
-                st.markdown(f"- {label}　6ヶ月 {r6:+.0f}%")
+                st.markdown(f"- {label}　6ヶ月 {r6:+.0f}%　MA200乖離 {dev:+.1f}%")
     else:
         st.caption("モメンタム売りの点灯はなしなのだ。")
 
@@ -1388,7 +1466,17 @@ if _div["daily"]:
 # 買い=6ヶ月+50%上昇かつMA200上、売り=MA200割れ。買う買わないはわさびが都度判断
 _mom = momentum_signal(ticker)
 if _mom == "buy":
-    st.success("🚀 **モメンタム買いシグナル** → 過去6ヶ月+50%以上上昇かつMA200より上（順張りの勢い継続中）。3銘柄分散・1銘柄約3万円で検討")
+    # ★入口ルール②のMA200乖離+18%以内をここでも判定する（一覧とポップアップだけでなく個別画面でも）
+    _mdev = float(latest["ma200_dev"]) if pd.notna(latest["ma200_dev"]) else None
+    if _mdev is not None and _mdev <= 18:
+        st.success(f"🚀 **モメンタム買いシグナル** → 6ヶ月+50%以上かつMA200上。"
+                   f"MA200乖離 **{_mdev:+.1f}%** ✅+18%以内で入口適格なのだ（EV+23.0%・ペイオフ7.23倍）。"
+                   "1銘柄¥1〜2万（Tier C）・同時保有2銘柄まで・黒字・集中ルール非抵触・決算をまたがない")
+    elif _mdev is not None:
+        st.warning(f"🚀 モメンタム買いシグナルだが **MA200乖離 {_mdev:+.1f}%＝+18%超で入口不適** なのだ。"
+                   "伸びきっていて入口に適さないという意味で、押し目を待つ対象なのだ")
+    else:
+        st.success("🚀 **モメンタム買いシグナル** → 6ヶ月+50%以上かつMA200上（MA200乖離は算出不可）")
 elif _mom == "sell":
     st.warning("📉 **モメンタム売りシグナル** → MA200を割れた（順張りトレンド終了）。モメンタムで保有していれば売り検討")
 
