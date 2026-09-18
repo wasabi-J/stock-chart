@@ -1734,6 +1734,26 @@ SL-15%: {symbol}{_p*0.85:,.2f}
     st.code(_summary, language=None)
     st.caption("右上のコピーアイコンで全文コピーできるのだ。そのままClaudeに貼れば相談が一発なのだ。")
 
+# === 〽️ スイング点の数値出力（2026-09-18追加・視覚補助の数値版）===
+# ★足種はここで独立に選ぶ（下のチャートの時間軸とは連動させない）。
+#   チャートは日足で見ながら週足のスイングを確認する、という使い方をするため。
+with st.expander("〽️ ギャンスイングの数値（日付 / H・L / 価格）", expanded=False):
+    _sw_tf = st.radio("足種", ["日足", "週足", "月足"], index=0, horizontal=True, key="swing_tf")
+    _sw_b = completed_bars_for_swing(df, _sw_tf)
+    _sw_pts, _sw_pend = calc_gann_swing(_sw_b)
+    if not _sw_pts:
+        st.caption("確定したスイング点がまだないのだ（3本連続の転換が成立していないのだ）。")
+    else:
+        _sw_lines = ["| 日付 | H/L | 価格 |", "|---|---|---|"]
+        for _d, _p, _k, _pos in _sw_pts[-40:]:
+            _sw_lines.append(f"| {_d.strftime('%Y-%m-%d')} | {_k} | {symbol}{_p:,.2f} |")
+        if _sw_pend is not None:
+            _sw_lines.append(f"| {_sw_pend[0].strftime('%Y-%m-%d')} | （未確定） | {symbol}{_sw_pend[1]:,.2f} |")
+        st.code("\n".join(_sw_lines), language=None)
+        st.caption(f"{_sw_tf}で確定{len(_sw_pts)}点（直近40点まで表示）。"
+                   "**最終行の（未確定）は転換がまだ成立していない脚**で、後から別の位置に動くのだ。"
+                   "確定点も「後から振り返れば天底だった」点であって、その時点で分かっていたものではないのだ")
+
 tf = st.radio("チャート時間軸", ["日足","週足","月足"], index=0, horizontal=True)
 
 def make_chart_frame(df, tf):
@@ -1781,7 +1801,7 @@ def make_chart_frame(df, tf):
 def calc_gann_swing(cd, n=3):
     """ギャンスイングの折れ点を返す。
     戻り値: (confirmed, pending)
-      confirmed = [(日付, 価格), ...] 確定したスイング点（実線で結ぶ）
+      confirmed = [(日付, 価格, "H"/"L", バー位置), ...] 確定したスイング点（実線で結ぶ）
       pending   = (日付, 価格) or None 最後の確定点から現在バーまでの未確定脚の終点（点線で結ぶ）
     ★未確定脚を点線にするのは【過去チャートが「完璧に天底を当てている」ように見える錯覚】を防ぐため。
       確定したスイング点は「後から振り返れば天底だった」点であり、その時点で分かっていたものではない。
@@ -1814,11 +1834,11 @@ def calc_gann_swing(cd, n=3):
             continue
         if state == "up" and dn_cnt >= n:
             p = seg_start + int(np.argmax(high[seg_start:i+1]))   # up区間の最高値バー
-            points.append((idx[p], float(high[p])))
+            points.append((idx[p], float(high[p]), "H", p))
             state, seg_start, up_cnt, dn_cnt = "down", p, 0, 0
         elif state == "down" and up_cnt >= n:
             p = seg_start + int(np.argmin(low[seg_start:i+1]))    # down区間の最安値バー
-            points.append((idx[p], float(low[p])))
+            points.append((idx[p], float(low[p]), "L", p))
             state, seg_start, up_cnt, dn_cnt = "up", p, 0, 0
     if state is None or not points:
         return points, None
@@ -1826,6 +1846,33 @@ def calc_gann_swing(cd, n=3):
     last = len(close) - 1
     pending = (idx[last], float(high[last] if state == "up" else low[last]))
     return points, pending
+
+def calc_envelope_line(points, kind, last_pos):
+    """包絡線法でトレンドラインを引く（2026-09-18追加・★視覚補助のみ）。
+    【定義】高値側＝全スイング高値がその線【以下】に収まる直線のうち、最も傾きの緩いもの。
+            安値側＝全スイング安値がその線【以上】に収まる直線のうち、最も傾きの緩いもの。
+    【計算】★必ずlog(価格)空間で行う。株価は比率で動くため線形空間で引くと、
+            価格が高い時期ほど線が実態より近く見え、安い時期ほど遠く見えてズレる。
+            対数軸トグルのオン/オフでこの線の位置は変わらない（変わるのは軸の見え方だけ）。
+    【一意性】最後のスイング点を支点にして回すと、有効な線（全点が収まる線）の傾きには上限
+            （高値側）または下限（安値側）があり、その境界がそのまま「最も傾きの緩い線」になる。
+            よって2点で接する直線が一意に決まる＝どれを選ぶかの恣意性がない。
+    戻り値: (x0, y0, x1, y1) バー位置と実価格 / None（スイング点が2つ未満）"""
+    pts = [(pos, price) for _, price, k, pos in points if k == kind and price > 0]
+    if len(pts) < 2:
+        return None
+    xs = np.array([p[0] for p in pts], dtype=float)
+    ys = np.log(np.array([p[1] for p in pts], dtype=float))
+    xn, yn = xs[-1], ys[-1]
+    slopes = [(yn - y) / (xn - x) for x, y in zip(xs[:-1], ys[:-1]) if x < xn]
+    if not slopes:
+        return None
+    slope = min(slopes) if kind == "H" else max(slopes)
+    x0 = float(xs[0])
+    x1 = float(max(last_pos, xn))          # 現在バーまで延長する
+    y0 = yn + slope * (x0 - xn)
+    y1 = yn + slope * (x1 - xn)
+    return x0, float(np.exp(y0)), x1, float(np.exp(y1))
 
 def completed_bars_for_swing(df, tf):
     """ギャンスイング用に【完成バーのみ】のOHLCを作る。
@@ -1854,14 +1901,32 @@ def completed_bars_for_swing(df, tf):
 
 cframe = make_chart_frame(df, tf)
 
-show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
-    help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼(フル点灯は💎⛔)で表示")
-show_hlines = st.checkbox("➖ 過去高値/安値の水平ラインを表示", value=False,
-    help="意識されやすい過去の高値(赤)・安値(水色)に水平線を引く")
-show_legend = st.checkbox("🏷️ チャート上部の線の説明（凡例）を表示", value=False)
-show_gann = st.checkbox("〽️ ギャンスイングを表示", value=False,
-    help="終値3本連続で転換を判定し、転換時に区間の高値/安値（ヒゲ）を結ぶジグザグ線。"
-         "★視覚補助のみでスコアやアラートには一切影響しないのだ。未確定の脚は点線で描くのだ")
+# === チャート表示設定（2026-09-18・トグルを1箇所に集約）===
+# ★key=を付けるとStreamlitがsession_stateで状態を保持するので、銘柄を切り替えてもチェックが外れない。
+# ★トグル操作はre-runを起こすが、load_dataに@st.cache_data(ttl=3600)が付いているので
+#   yfinanceへの再取得は発生しない（1時間以内なら再計算のみ＝待ち時間なし）。
+with st.expander("▶ チャート表示設定", expanded=False):
+    st.checkbox("📈 価格軸を対数にする", value=False, key="cs_log",
+        help="価格パネルのみ対数。RSIとMACDは線形のまま（0〜100の有界指標と振動指標なので対数の意味がない）のだ")
+    st.checkbox("〽️ ギャンスイングを表示", value=False, key="cs_gann",
+        help="終値3本連続で転換を判定し、転換時に区間の高値/安値（ヒゲ）を結ぶジグザグ線。"
+             "★視覚補助のみでスコアやアラートには一切影響しないのだ。未確定の脚は点線で描くのだ")
+    st.checkbox("📐 トレンドライン（包絡線法）を表示", value=False, key="cs_trend",
+        help="スイング高値が全て下に収まる線／スイング安値が全て上に収まる線を、log価格空間で引くのだ。"
+             "ギャンスイングがオフでも単体で表示できるのだ")
+    st.divider()
+    st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True, key="cs_signals",
+        help="日足で大底9以上/天井8以上が点灯した日を価格チャート上に▲▼(フル点灯は💎⛔)で表示")
+    st.checkbox("➖ 過去高値/安値の水平ラインを表示", value=False, key="cs_hlines",
+        help="意識されやすい過去の高値(赤)・安値(水色)に水平線を引く")
+    st.checkbox("🏷️ チャート上部の線の説明（凡例）を表示", value=False, key="cs_legend")
+
+show_log = st.session_state.get("cs_log", False)
+show_gann = st.session_state.get("cs_gann", False)
+show_trend = st.session_state.get("cs_trend", False)
+show_signals = st.session_state.get("cs_signals", True)
+show_hlines = st.session_state.get("cs_hlines", False)
+show_legend = st.session_state.get("cs_legend", False)
 
 period_options = {"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
 disp = st.radio("表示期間", list(period_options.keys()), index=1, horizontal=True)
@@ -1884,15 +1949,17 @@ fig.add_trace(go.Candlestick(x=chart_df.index,
     increasing_fillcolor="#ef4444", decreasing_fillcolor="#3a8fff",
     line=dict(width=1)), row=1, col=1)
 
-# === ギャンスイングの描画（視覚補助のみ）===
+# === ギャンスイング／トレンドラインの描画（視覚補助のみ）===
 # 確定スイング＝実線、未確定脚＝点線＋薄色。表示期間の外の点は描画範囲でクリップする。
-if show_gann:
+if show_gann or show_trend:
     _sw_bars = completed_bars_for_swing(df, tf)
     _gann_pts, _gann_pending = calc_gann_swing(_sw_bars)
     _xmin, _xmax = chart_df.index.min(), chart_df.index.max()
+
+if show_gann and _gann_pts:
     # 表示範囲の左端をまたぐ脚を切らないため、範囲外の直前1点も残して線をつなぐ
-    _vis = [(d, p) for d, p in _gann_pts if _xmin <= d <= _xmax]
-    _before = [(d, p) for d, p in _gann_pts if d < _xmin]
+    _vis = [(d, p) for d, p, k, pos in _gann_pts if _xmin <= d <= _xmax]
+    _before = [(d, p) for d, p, k, pos in _gann_pts if d < _xmin]
     if _before:
         _vis = [_before[-1]] + _vis
     if len(_vis) >= 2:
@@ -1907,6 +1974,21 @@ if show_gann:
             mode="lines", name="ギャンスイング（未確定）",
             line=dict(color="rgba(250,204,21,0.45)", width=1.4, dash="dot"),
             hovertext=["未確定の脚（転換していないのだ）"] * 2, hoverinfo="text+x"), row=1, col=1)
+
+if show_trend and _gann_pts and len(_sw_bars) > 0:
+    # 包絡線法。バー位置→日付の変換に_sw_barsのindexを使う（休場日を跨いでも線が歪まない）
+    _last_pos = len(_sw_bars) - 1
+    for _kind, _nm, _col in [("H", "トレンドライン（高値側）", "#f43f5e"),
+                             ("L", "トレンドライン（安値側）", "#22d3ee")]:
+        _ln = calc_envelope_line(_gann_pts, _kind, _last_pos)
+        if _ln is None:
+            continue
+        _x0, _y0, _x1, _y1 = _ln
+        _i0, _i1 = int(max(0, min(_x0, _last_pos))), int(max(0, min(_x1, _last_pos)))
+        fig.add_trace(go.Scatter(x=[_sw_bars.index[_i0], _sw_bars.index[_i1]], y=[_y0, _y1],
+            mode="lines", name=_nm,
+            line=dict(color=_col, width=1.3, dash="dash"),
+            hovertext=[_nm] * 2, hoverinfo="text+x"), row=1, col=1)
 
 # === 過去高値/安値の水平ライン（意識される価格帯）===
 if show_hlines and len(chart_df) > 20:
@@ -1992,6 +2074,22 @@ fig.update_layout(height=700, paper_bgcolor="#070f18", plot_bgcolor="#0c1a28",
     xaxis_rangeslider_visible=False)
 fig.update_xaxes(gridcolor="#1a2a3a")
 fig.update_yaxes(gridcolor="#1a2a3a")
+# === 価格軸の対数切り替え（row1のみ）===
+# ★RSI(row2)とMACD(row3)は線形のまま。RSIは0〜100の有界指標、MACDはゼロをまたぐ差分なので
+#   そもそも対数を取れない（負値でlogが定義されない）。対数にしてよいのは正の価格だけなのだ。
+if show_log:
+    # plotlyの対数軸は放置すると 1e+2 のような指数表記になるため、tickformatで通常表記に固定する。
+    # 桁に応じて小数を出し分ける＝日本株(¥数千)はカンマ区切り、低位株($2台)は小数2桁まで出す。
+    _pmax = float(chart_df["high"].max())
+    if _pmax >= 100:
+        _tickfmt = ",.0f"
+    elif _pmax >= 10:
+        _tickfmt = ",.1f"
+    else:
+        _tickfmt = ",.2f"
+    fig.update_yaxes(type="log", tickformat=_tickfmt, exponentformat="none", row=1, col=1)
+else:
+    fig.update_yaxes(type="linear", tickformat=",.2f", row=1, col=1)
 fig.update_yaxes(title_text="RSI", row=2, col=1)
 fig.update_yaxes(title_text="MACD", row=3, col=1)
 st.plotly_chart(fig, use_container_width=True,
