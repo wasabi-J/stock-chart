@@ -16,17 +16,19 @@ GROUPS = {
     "📁 保有中": {
         "COIN（コインベース）": "COIN",
         "CPRI（カプリHD・逆張り柱）": "CPRI",
-        "ESAB（溶接・切断機器・逆張り柱）": "ESAB",  # 2026-09-11に2株取得して監視から移動
+        "ESAB（溶接・切断機器・逆張り柱）": "ESAB",   # 2026-09-11に2株取得
+        "GRAB（グラブ・逆張り柱）": "GRAB",           # 2026-09-16に22株取得
+        "PFSI（ペニーマック・逆張り柱）": "PFSI",      # 2026-09-16に2株取得（ティアS）
+        "TME（テンセントミュージック・逆張り柱）": "TME",  # 2026-09-14に8株取得
         "MSTR（マイクロストラテジー）": "MSTR",
         "1328（金ETF・日本）": "1328.T",
         "6963（ローム・モメンタム柱）": "6963.T",
     },
-    "📁 短期戦略": {
-        "KRUS（くら寿司USA）": "KRUS",
-    },
     "📁 監視": {
         "SHAK（シェイクシャック）": "SHAK",
         "JNJ（J&J・守り優等生）": "JNJ",
+        "KRUS（くら寿司USA・2026-09に逆指値発動で売却済→監視）": "KRUS",
+        "CRWD（クラウドストライク・2026-09-18登録）🆕": "CRWD",
         "PG（P&G・守り）": "PG",
         "CRM（セールスフォース・攻め）": "CRM",
         "AVAV（エアロバイロンメント）": "AVAV",
@@ -63,7 +65,6 @@ GROUPS = {
         "MMS（マキシマス・政府BPO）": "MMS",
         "NKE（ナイキ）": "NKE",
         "ONON（オン・スニーカー）": "ONON",
-        "PFSI（ペニーマック・住宅ローン）": "PFSI",
         "POST（ポストHD・シリアル）": "POST",
         "PPC（ピルグリムズプライド・鶏肉）": "PPC",
         "SGI（ソムニグループ・マットレス）": "SGI",
@@ -86,7 +87,6 @@ GROUPS = {
         "FLO（フラワーズフーズ・製パン）": "FLO",
         "GAP（ギャップ・アパレル小売）": "GAP",
         "GME（ゲームストップ・現金9.7B）": "GME",
-        "GRAB（グラブ・東南アジア配車）": "GRAB",
         "HDB（HDFC銀行・インド）": "HDB",
         "IPGP（IPGフォトニクス・レーザー）": "IPGP",
         "LII（レノックス・空調）": "LII",
@@ -167,7 +167,6 @@ GROUPS = {
         "AAON（エーオン・空調機器）": "AAON",
         "FICO（フェアアイザック・信用スコア）": "FICO",
         "LULU（ルルレモン・アパレル）": "LULU",
-        "TME（テンセントミュージック・中国ADR）": "TME",
         "3110（日東紡績・ガラス繊維）": "3110.T",
         "4516（日本新薬・医薬品）": "4516.T",
         "6366（千代田化工建設・プラントエンジ）": "6366.T",
@@ -215,7 +214,7 @@ _watch_jp = {k: v for k, v in _watch.items() if v.endswith(".T")}
 _reordered = {}
 for _k, _v in GROUPS.items():
     _reordered[_k] = _v
-    if _k == "📁 短期戦略":  # 監視は短期戦略の直後に戻す（元の並び順を保つ）
+    if _k == "📁 保有中":  # 監視は保有中の直後に戻す（📁短期戦略はKRUS売却で2026-09-18に廃止）
         _reordered[f"📁 監視・米国株（{len(_watch_us)}）"] = _watch_us
         _reordered[f"📁 監視・日本株（{len(_watch_jp)}）"] = _watch_jp
 GROUPS = _reordered
@@ -234,6 +233,29 @@ ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
 #   「大底で買って戻るまで待つ」が最も苦手とする商品。バックテスト237取引も個別株ベース。
 #   地図として見るのは自由で、裁量枠で触るならTSLLと同じ扱い。
 EXCLUDED_TICKERS = {"SOXL", "QS", "TSLL", "TTD", "1458.T", "2869.T"}
+
+# === 企業アクションによる指標汚染（2026-09-18追加）===
+# ★yfinanceのauto_adjustは配当と株式分割は調整するが【スピンオフは調整しない】
+#   （切り出された会社が別ティッカーになるため機械的に処理できない）。
+#   汚染される指標＝深度／MA200乖離／6ヶ月リターン／RSI系＝つまり大底スコアの土台が丸ごと歪む。
+# ★これを画面に出す理由＝点灯のたびに調べ直すのは非効率で、忘れると事故になるから。
+#   手がかりは「高値からの経過日数」が企業アクションの日付と近いこと。
+# ★汚染が解けたら（期限経過等）この辞書から消すこと。期限も本文に書いておく。
+CORPORATE_ACTIONS = {
+    "APTV": "🚨 **深度が汚染されている**のだ。2026-04-01にEDS（電装部門）をVersigent PLCとして"
+            "スピンオフしたが、yfinanceは調整しないのだ。52週高値$88.63はEDS込みの旧APTV、"
+            "現在値はEDS抜きの新APTV＝**別会社どうしを比べている**のだ。"
+            "**真の深度は-30%前後**で-45%基準を通らないのだ（2026-08-31の点灯はこれが決定打で見送り）。"
+            "★2027-04まで汚染が続くのだ",
+    "7649.T": "⚠️ 2026-08-27に1:2株式分割。yfinanceが調整するので**株価系列そのものは正しい**が、"
+              "分割当日は1日の変化率ガードが誤発火するのだ",
+    "CRWD": "⚠️ 2026-07-02に1:4株式分割（基準日6/25）。yfinanceが調整するので株価系列は正しいが、"
+            "分割当日は変化率ガードが誤発火するのだ。★GAAP赤字だが正体はSBCで、"
+            "営業CF年$1.61B・FCF$1.24B＝倒産リスクなしと判断して2026-09-18に登録したのだ",
+    "2695.T": "ℹ️ 2026-05-01に1:2株式分割。yfinanceが調整するので**汚染なし**なのだ",
+    "ESAB": "ℹ️ 2022-03-29にColfaxからスピンオフして新規上場。新ティッカーなので**データ自体の汚染はない**が、"
+            "上場4年ルールの起点がこの日で2026-03-29に4年経過＝ギリギリ通過だったのだ",
+}
 
 # 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
 HELD_TICKERS = set(GROUPS["📁 保有中"].values())
@@ -522,7 +544,7 @@ def scan_full_history(days_back=365):
     events = []  # (date, label, ticker, kind, is_held)
     for label, tk in ALL_TICKERS:
         try:
-            d = load_data(tk, "2y")
+            d = load_data(tk, "5y")  # ★scan_all(5y)のキャッシュを再利用＝再ダウンロードしない
             if d is None:
                 continue
             raw_b = []
@@ -656,29 +678,22 @@ def monthly_trend_direction(ticker, period="max"):
 # === (え) モメンタム判定 ===
 # 検証：暗号資産・高ボラ株で「過去6ヶ月+50%上昇かつMA200より上」が買い、「MA200割れ」が売り
 # 全銘柄でフラットに表示（効かない銘柄も含めて経験として学ぶ方針）
-@st.cache_data(ttl=3600)
-def momentum_signal(ticker, period="max"):
-    """モメンタムシグナルを判定。
-    戻り値: 'buy'（過去6ヶ月+50%上昇かつMA200上）/ 'sell'（MA200割れ）/ None（どちらでもない・データ不足）"""
+def momentum_signal(df):
+    """モメンタムシグナルを判定。★2026-09-18：引数をticker→dfに変えた。
+    旧実装はload_data(ticker,"max")を呼んでおり、"5y"でダウンロード済みの銘柄を
+    キャッシュキー違いでもう一度丸ごと落としていた（判定に使うのは直近200日だけなのに）。
+    戻り値: 'buy'（6ヶ月+50%上昇かつMA200上）/ 'sell'（MA200割れ）/ None"""
     try:
-        d = load_data(ticker, period)
-        if d is None:
-            return None
-        c = d["close"]
+        c = df["close"]
         if len(c) < 200:
             return None
         ma200 = c.rolling(200).mean().iloc[-1]
         price = c.iloc[-1]
-        if pd.isna(ma200):
-            return None
-        # 過去6ヶ月（126営業日）の上昇率
-        if len(c) < 127:
+        if pd.isna(ma200) or len(c) < 127:
             return None
         ret_6m = (price - c.iloc[-127]) / c.iloc[-127] * 100
-        # 買い：6ヶ月+50%上昇 かつ MA200より上
         if ret_6m >= 50 and price > ma200:
             return "buy"
-        # 売り：MA200を割れた
         if price < ma200:
             return "sell"
         return None
@@ -691,7 +706,7 @@ def momentum_exit_status(ticker):
     戻り値: dict{price, ma200, dev(乖離率%), dist(損切りまで何%下がるか), date} / None
     ※MA200は日々動くため損切りラインは固定せず、この表示で毎回更新して確認する。"""
     try:
-        d = load_data(ticker, "2y")
+        d = load_data(ticker, "5y")  # ★2y→5y。scan_allのキャッシュを再利用して二重取得を避ける
         if d is None or len(d) < 200:
             return None
         c = d["close"]
@@ -721,12 +736,9 @@ def calc_ret_6m(df):
 # 検証：月足=勝率79%（超強気の買い場サイン）、日足=勝率74%（補助）。週足は日足と大差なく不採用
 # 重要：「待つサイン」ではなく「もう底・買い場のサイン」
 # ★RSIはWilder方式に統一（2026-08-22）
-def _rsi_series(c, period=14):
-    return wilder_rsi(c, period)
-
 def _detect_divergence(s):
     """直近で強気ダイバージェンスが発生しているか判定。発生していればTrue"""
-    r = _rsi_series(s)
+    r = wilder_rsi(s)
     vals = s.values
     rvals = r.values
     n = len(vals)
@@ -746,21 +758,15 @@ def _detect_divergence(s):
             return True
     return False
 
-@st.cache_data(ttl=3600)
-def divergence_signals(ticker, period="max"):
-    """月足・日足の強気ダイバージェンスを判定。
+def divergence_signals(df):
+    """月足・日足の強気ダイバージェンスを判定。★2026-09-18：引数をticker→dfに変えた
+    （momentum_signalと同じく"max"の二重ダウンロードを廃止するため）。
     戻り値: dict {'monthly': bool, 'daily': bool}"""
     result = {"monthly": False, "daily": False}
     try:
-        d = load_data(ticker, period)
-        if d is None:
-            return result
-        c = d["close"]
-        # 日足
+        c = df["close"]
         result["daily"] = _detect_divergence(c)
-        # 月足
-        sm = c.resample("ME").last().dropna()
-        result["monthly"] = _detect_divergence(sm)
+        result["monthly"] = _detect_divergence(c.resample("ME").last().dropna())
     except Exception:
         pass
     return result
@@ -768,14 +774,10 @@ def divergence_signals(ticker, period="max"):
 # === ここぞ判定（最強条件アラート用）===
 # 検証で最強だった3つの強化条件：VIX30以上(EV+56%)・高ボラ(暗号資産EV+67%)・月足ダイバージェンス(勝率79%)
 # 大底8以上を必須に、3つ揃う=案A(🔥確定演出)、2つ揃う=案B(⭐ここぞ)
-@st.cache_data(ttl=3600)
-def is_high_vol(ticker, period="5y"):
-    """直近20日ボラが60日平均より高いか"""
+def is_high_vol(df):
+    """直近20日ボラが60日平均より高いか。★2026-09-18：引数をticker→dfに変えた"""
     try:
-        d = load_data(ticker, period)
-        if d is None:
-            return False
-        c = d["close"]
+        c = df["close"]
         vol20 = c.pct_change().rolling(20).std()
         vol_ma = vol20.rolling(60).mean()
         v, vm = vol20.iloc[-1], vol_ma.iloc[-1]
@@ -798,7 +800,7 @@ def get_vix_level():
 # 🔥確定演出の判定（大底8＋VIX30＋高ボラ）はバケット振り分けの中で直接行っている。
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
-# 母集団134銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
+# 母集団135銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
 # 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
 def _cluster_signals(d, kind="bottom", thr=9, gap=10):
     """点灯日をクラスタ化して「1山＝1イベント」に畳む共通処理。
@@ -850,8 +852,8 @@ def bulk_signal_row(ticker, period="5y"):
         ts, _ = calc_top_score(r)
         ws, _ = calc_weekly_bottom_score(d)
         per, pbr, per_est = get_per_pbr(ticker)
-        trend = monthly_trend_direction(ticker)
-        div = divergence_signals(ticker)
+        trend = monthly_trend_direction(ticker, "5y")  # ★"max"だと二重ダウンロードになる
+        div = divergence_signals(d)
         to, liq, tsym = check_liquidity(d, ticker)
         n9 = _count_bottom9_clusters(d)
         return {
@@ -864,7 +866,7 @@ def bulk_signal_row(ticker, period="5y"):
             "rally": float(r["rally_pct"]), "dfh": int(r["days_from_high"]),
             "avol": calc_annual_vol(d), "ret6": calc_ret_6m(d),
             "to": to, "liq": liq,
-            "n9": n9, "highvol": is_high_vol(ticker),
+            "n9": n9, "highvol": is_high_vol(d),
         }
     except Exception:
         return None
@@ -881,9 +883,10 @@ def bucket_row_info(ticker):
         ws, _ = calc_weekly_bottom_score(d)
         return {"ws": ws,
                 "trend": monthly_trend_direction(ticker, "5y"),
-                "avol": calc_annual_vol(d)}
+                "avol": calc_annual_vol(d),
+                "highvol": is_high_vol(d)}   # ★高ボラ判定もここに畳んだ（旧is_high_vol(ticker)の重複呼び出しを廃止）
     except Exception:
-        return {"ws": None, "trend": None, "avol": None}
+        return {"ws": None, "trend": None, "avol": None, "highvol": False}
 
 def _fmt_ws(ws):
     """週足スコアを帯の意味つきで文字列化（<5💧足切り／7-8🎯最良帯／9⚠️満点警戒）"""
@@ -914,13 +917,16 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **低ボラ側(資金を厚くしない)**: GLD/JNJ/PG/1345(Jリート指数ETF)は💎検証で「VIX30でも成績が改善しない」側。登録は自由だが厚く張る対象ではない。
 **優待銘柄(別財布)**: 8136サンリオ／3549クスリのアオキ／4661オリエンタルランド／7615京都きもの友禅HD。買う目的が優待なら逆張りシステムの土俵外＝大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
+**🔬対象外と落第履歴は別物**: 🔬対象外=**登録済みだが買わないと決めた（恒久）**／落第履歴=**審査して登録しなかった（再審査ありうる）**。性質が違うので混ぜないのだ。落第履歴は株式部屋が持つのだ。
+**赤字の判定は経常損益で見る**: 純損益だけ見ると一時費用で赤字の優良企業を落としてしまうのだ。★BLDR型=本業が黒字で、その下の一時費用（IRS和解の税費用$43.9M）で赤字→**通過**。★7412アトム型=営業+25百万だが**経常-22百万で赤字**、そこに減損677百万が乗って純損失15.07億→**落第**。★QXO型=営業段階で赤字→**落第**。判定は経常損益が実務的なのだ。
 **検証済(対象外)**: SOXL/QS/TSLL/TTD/1458/2869は🔬対象外＝バケットの件数と一括出力に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で登録目的は$7割れの検知のみ。TTD=バリュエーション・リセット型（PER297倍→17倍の縮小がそのまま-89%の株価下落に一致）で大底スコアが効かないと決着済み・観察はEPSと月足downの2点のみ。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
 **🆕銘柄**: 2026-09-12の週次スクリーニング通過組（13件）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDR（8/29組）はIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
 **同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP/LULU/AEO/8267　②建材・住宅・建設=BLDR/SITE/LII/PNR/AAON/ACM/AMTM/TGLS/1801/1835/1893/6366　③コモディティ=GLD/SLV/COPX　④中国ADR=BABA/TME/BILI　⑤プリント基板=4971メック(薬品)/6278ユニオンツール(ドリル)/6787メイコー(基板本体)＝川上から川下まで同じ需要で動く　⑥住宅ローン・不動産金融=RKT/PFSI/WD　⑦インド=HDB/INFY。★空調はLIIとAAONが直接competitorなので特に択一。VIX30では塊ごと同時点灯するので、1つの塊から取るのは1銘柄までにするのだ。
-**★★2695くら寿司とKRUSは親子会社**: KRUS（くら寿司USA・短期戦略で保有中）は2695の子会社。両方持つのは分散ではなく同じ会社への二重露出なのだ。2695を買うならKRUSを閉じてから。
+**★★2695くら寿司とKRUSは親子会社**: KRUSは2695の子会社。両方持つのは分散ではなく同じ会社への二重露出なのだ。★KRUSは2026-09に逆指値発動で売却済みなので、現在この衝突は解消しているのだ（📁短期戦略はこれに伴い廃止）。
+**企業アクション汚染**: APTV/7649/CRWD/2695/ESABは企業アクションの影響を受けているのだ。該当銘柄を開くと画面に警告が出るのだ。★特にAPTVはスピンオフをyfinanceが調整しないため**深度が丸ごと嘘**で、真の深度は-30%前後なのだ（2027-04まで）。
 **週次スクリーナー条件(2026-08-22改定)**: RSI(14)31〜45 / 52週高値から【-45%以上】/ MA200乖離-15%以下 / 米国=時価総額$1B・売買代金$7M / 日本=時価総額300億円・売買代金1億円。深度を-30%→-45%に締めたのは-50〜-30%が3年到達率17.3%の最弱帯だったため。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
@@ -950,7 +956,7 @@ if _hm >= 22 * 60 + 30 or _hm < 5 * 60:
                "今まさに動いている値動きは反映されていないのだ。判断は米国の引け後（日本時間の朝）に行うのだ")
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
-# 背景：母集団134銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
+# 背景：母集団135銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
 # よって点灯を「一覧」でなく「スコア別の束」にした。点灯銘柄は該当バケットに自動で積まれるので
 # 枠を作る作業は不要（VIX30で30件来たら大底9の枠が伸びるだけ）。
 # 旧「ここぞアラート枠」と「通常点灯枠」で同じ銘柄を2箇所に出していた二重表示はこれで解消。
@@ -983,13 +989,14 @@ for _lb, _tk, _bs, _ts in scan:
     if _bs < 8 or _tk in ("^VIX", "^TNX"):
         continue
     _short = _lb.split("（")[0].strip()
+    _info = bucket_row_info(_tk)
     _conds = []
     if _vix30:
         _conds.append("VIX30")
-    if is_high_vol(_tk):
+    if _info.get("highvol"):
         _conds.append("高ボラ")
     _row = {"short": _short, "tk": _tk, "bs": _bs, "conds": _conds,
-            "held": _tk in HELD_TICKERS, "info": bucket_row_info(_tk)}
+            "held": _tk in HELD_TICKERS, "info": _info}
     if _tk in EXCLUDED_TICKERS:
         _excluded_lit.append(_row)
         continue
@@ -1017,6 +1024,9 @@ def _render_row(r):
     tags = ""
     if r["held"]:
         tags += " `保有`"
+    if r["tk"] in CORPORATE_ACTIONS:
+        # 🚨（深度が実際に歪んでいる）だけ一覧に出す。ℹ️と⚠️は個別画面で見れば足りる
+        tags += " `🚨企業アクション`" if CORPORATE_ACTIONS[r["tk"]].startswith("🚨") else " `⚠️企業アクション`"
     if r["conds"]:
         tags += f" `⭐{'/'.join(r['conds'])}`"
     return f"- **{r['short']}**　週足 {ws}　月足 {tr}　ボラ {av}{tags}"
@@ -1325,6 +1335,31 @@ with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井
         else:
             st.caption("該当なしなのだ。")
 
+# === 📋 登録銘柄リストの書き出し（2026-09-12追加・週次ルーチン用）===
+# 背景＝株式部屋のメモリーが持つ登録リストは更新を忘れると古くなる（9/5時点で止まり、9/9に手動追加した
+# 2695が抜けていたため、9/12の週次で既登録の3件を重複登録しかける事故が起きた）。
+# ★このリストはGROUPSから機械的に生成するので【コードが正】であり、写し間違いも更新漏れも起こらない。
+# ★運用＝週次ルーチンを始める前にここを開いてコピーし、株式部屋の冒頭に貼る。
+#   これで株式部屋は「今アプリに何が入っているか」を推測せずに済む（推測で埋めたのが事故の原因だった）。
+with st.expander("📋 登録銘柄リストの書き出し（★週次ルーチンの第1手順なのだ）"):
+    st.warning("⚠️ **週次ルーチンは必ずここから始めるのだ。** 下のリストをコピーして株式部屋の冒頭に貼るのだ。"
+               "これを飛ばすと株式部屋は「今アプリに何が入っているか」を推測で埋めることになり、"
+               "既登録銘柄を重複登録する事故が起きるのだ（2026-09-12に実際に発生した）。"
+               "★点灯相談の時は不要なのだ＝アプリが点灯を検知している時点で登録済みは自明だからなのだ")
+    _dt_now = datetime.now(JST).strftime("%Y-%m-%d")
+    _total_reg = sum(len(v) for v in GROUPS.values())
+    _reg_lines = [f"【アプリ登録銘柄・全{_total_reg}（{_dt_now}時点・アプリから自動生成）】"]
+    for _gn, _gd in GROUPS.items():
+        _tk_txt = "／".join(
+            (t[:-2] if t.endswith(".T") else t) + ("(🔬)" if t in EXCLUDED_TICKERS else "")
+            for t in _gd.values())
+        _reg_lines.append(f"{_gn}＝{_tk_txt}")
+    _reg_lines.append("🔬対象外＝" + "／".join(sorted(EXCLUDED_TICKERS))
+                      + "（登録済みだが買わないと決めた＝恒久。審査して登録しなかった『落第履歴』とは別物なのだ）")
+    st.code("\n".join(_reg_lines), language=None)
+    st.caption("右上のコピーアイコンで全文コピーできるのだ。**コードが正**なので、"
+               "株式部屋のメモリーと食い違ったらこちらを信じるのだ")
+
 st.divider()
 
 col_g, col_t = st.columns([1,2])
@@ -1414,6 +1449,16 @@ if _to is not None:
 _p = float(latest["close"])
 st.caption(f"🎯 今買うなら｜損切り-15%＝{symbol}{_p*0.85:,.2f}｜+50%＝{symbol}{_p*1.5:,.2f}｜+100%＝{symbol}{_p*2:,.2f}｜+300%＝{symbol}{_p*4:,.2f}｜+500%＝{symbol}{_p*6:,.2f}（※3分割後は平均取得単価が基準）")
 
+# === 企業アクションによる指標汚染の警告（点灯を評価する前に必ず目に入る位置に置く）===
+if ticker in CORPORATE_ACTIONS:
+    _ca = CORPORATE_ACTIONS[ticker]
+    if _ca.startswith("🚨"):
+        st.error(f"**企業アクション：{_ca}**")
+    elif _ca.startswith("⚠️"):
+        st.warning(f"**企業アクション：{_ca}**")
+    else:
+        st.info(f"企業アクション：{_ca}")
+
 if ticker == "^VIX":
     st.info("ℹ️ VIXは読み替え注意：VIXの天井=恐怖最大=株の買い場 / VIXの底=楽観=株の天井警戒")
 
@@ -1481,7 +1526,7 @@ elif top_score == 7:
 
 # === (お) ダイバージェンス表示 ===
 # 月足=超強気の買い場サイン（勝率79%）、日足=補助（勝率74%）。「もう底・買い場」の意味
-_div = divergence_signals(ticker)
+_div = divergence_signals(df)
 if _div["monthly"]:
     st.success("‼️‼️‼️ **月足ダイバージェンス発生** ‼️‼️‼ → 超強気の買い場サイン（検証勝率79%・最強格）。株価は安値更新だがRSIは底打ち＝もう底が近い。待たずに買い場として検討")
 if _div["daily"]:
@@ -1489,7 +1534,7 @@ if _div["daily"]:
 
 # === (え) モメンタムシグナル表示（全銘柄フラット）===
 # 買い=6ヶ月+50%上昇かつMA200上、売り=MA200割れ。買う買わないはわさびが都度判断
-_mom = momentum_signal(ticker)
+_mom = momentum_signal(df)
 if _mom == "buy":
     # ★入口ルール②のMA200乖離+18%以内をここでも判定する（一覧とポップアップだけでなく個別画面でも）
     _mdev = float(latest["ma200_dev"]) if pd.notna(latest["ma200_dev"]) else None
@@ -1623,7 +1668,7 @@ with st.expander("📄 コピー用サマリー（Claude相談用・タップで
     _conds = []
     if _vix_now is not None and _vix_now >= 30:
         _conds.append("VIX30")
-    if is_high_vol(ticker):
+    if is_high_vol(df):
         _conds.append("高ボラ")
     if bottom_score >= 8 and len(_conds) >= 2:
         _kokozo = f"🔥確定演出（{' + '.join(_conds)}）"
@@ -1726,6 +1771,87 @@ def make_chart_frame(df, tf):
     cd["macd_hist"] = cd["macd"] - cd["macd_signal"]
     return cd
 
+# === ギャンスイング（2026-09-18追加・★視覚補助のみ）===
+# ★★この計算結果は大底/天井スコア・週足スコア・アラート・コピー用サマリーに一切入らない。
+#   入れていないことがこの機能の前提条件なので、将来スコアに混ぜたくなったら必ず株式部屋で決めること。
+# 【ルール】判定は終値・描画はヒゲ（High/Low）・スイング本数3。
+#   up中に終値が3本連続で切り下がったらdownへ転換／down中に3本連続で切り上がったらupへ転換。
+#   「連続」は直前バーとの比較で厳密に</>。同値が出たらカウントをリセットする。
+#   転換時、直前の区間で最高値（最安値）を付けたバーのHigh（Low）をスイング点として確定する。
+def calc_gann_swing(cd, n=3):
+    """ギャンスイングの折れ点を返す。
+    戻り値: (confirmed, pending)
+      confirmed = [(日付, 価格), ...] 確定したスイング点（実線で結ぶ）
+      pending   = (日付, 価格) or None 最後の確定点から現在バーまでの未確定脚の終点（点線で結ぶ）
+    ★未確定脚を点線にするのは【過去チャートが「完璧に天底を当てている」ように見える錯覚】を防ぐため。
+      確定したスイング点は「後から振り返れば天底だった」点であり、その時点で分かっていたものではない。
+      未確定脚を実線で描くと、いま進行中の脚まで当たっているように見えてしまう。省略禁止。"""
+    if cd is None or len(cd) < n + 2:
+        return [], None
+    close = cd["close"].values
+    high = cd["high"].values
+    low = cd["low"].values
+    idx = cd.index
+    state = None          # 'up' / 'down'
+    up_cnt = dn_cnt = 0
+    seg_start = 0         # 現在の区間の起点（最後に確定したスイング点のバー位置）
+    points = []
+    for i in range(1, len(close)):
+        if close[i] > close[i-1]:
+            up_cnt += 1
+            dn_cnt = 0
+        elif close[i] < close[i-1]:
+            dn_cnt += 1
+            up_cnt = 0
+        else:                     # 同値はカウントをリセット（厳密に</>で判定する）
+            up_cnt = dn_cnt = 0
+        if state is None:
+            # 初期状態＝最初に3本連続が成立した方向で開始する
+            if up_cnt >= n:
+                state, seg_start, up_cnt, dn_cnt = "up", i, 0, 0
+            elif dn_cnt >= n:
+                state, seg_start, up_cnt, dn_cnt = "down", i, 0, 0
+            continue
+        if state == "up" and dn_cnt >= n:
+            p = seg_start + int(np.argmax(high[seg_start:i+1]))   # up区間の最高値バー
+            points.append((idx[p], float(high[p])))
+            state, seg_start, up_cnt, dn_cnt = "down", p, 0, 0
+        elif state == "down" and up_cnt >= n:
+            p = seg_start + int(np.argmin(low[seg_start:i+1]))    # down区間の最安値バー
+            points.append((idx[p], float(low[p])))
+            state, seg_start, up_cnt, dn_cnt = "up", p, 0, 0
+    if state is None or not points:
+        return points, None
+    # 未確定脚＝最後の確定点から現在バーまで。終点は進行方向のヒゲを使う
+    last = len(close) - 1
+    pending = (idx[last], float(high[last] if state == "up" else low[last]))
+    return points, pending
+
+def completed_bars_for_swing(df, tf):
+    """ギャンスイング用に【完成バーのみ】のOHLCを作る。
+    日足＝そのまま／週足＝completed_weekly_closes()に準拠して未完成週を除外／月足＝未完成月を除外。
+    ★進行中のバーを入れるとスイング点が翌日には別の位置に動くため、確定点の意味が壊れる。"""
+    if tf == "日足":
+        return df[["open", "high", "low", "close"]]
+    rule = "W-FRI" if tf == "週足" else "ME"
+    o = df["open"].resample(rule).first()
+    h = df["high"].resample(rule).max()
+    lo = df["low"].resample(rule).min()
+    c = df["close"].resample(rule).last()
+    bars = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
+    if len(bars) == 0:
+        return bars
+    today = pd.Timestamp(datetime.now(JST).date())
+    if tf == "週足":
+        # completed_weekly_closes()と同じ判定＝ラベルの金曜が今日以降なら進行中
+        if bars.index[-1].normalize() >= today:
+            bars = bars.iloc[:-1]
+    else:
+        # 月足＝ラベル(月末)が今日以降なら進行中の月
+        if bars.index[-1].normalize() >= today:
+            bars = bars.iloc[:-1]
+    return bars
+
 cframe = make_chart_frame(df, tf)
 
 show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャートに表示", value=True,
@@ -1733,6 +1859,9 @@ show_signals = st.checkbox("📍 過去のシグナル点灯位置をチャー�
 show_hlines = st.checkbox("➖ 過去高値/安値の水平ラインを表示", value=False,
     help="意識されやすい過去の高値(赤)・安値(水色)に水平線を引く")
 show_legend = st.checkbox("🏷️ チャート上部の線の説明（凡例）を表示", value=False)
+show_gann = st.checkbox("〽️ ギャンスイングを表示", value=False,
+    help="終値3本連続で転換を判定し、転換時に区間の高値/安値（ヒゲ）を結ぶジグザグ線。"
+         "★視覚補助のみでスコアやアラートには一切影響しないのだ。未確定の脚は点線で描くのだ")
 
 period_options = {"6ヶ月":180,"1年":365,"2年":730,"全期間":99999}
 disp = st.radio("表示期間", list(period_options.keys()), index=1, horizontal=True)
@@ -1754,6 +1883,30 @@ fig.add_trace(go.Candlestick(x=chart_df.index,
     name="株価", increasing_line_color="#ef4444", decreasing_line_color="#3a8fff",
     increasing_fillcolor="#ef4444", decreasing_fillcolor="#3a8fff",
     line=dict(width=1)), row=1, col=1)
+
+# === ギャンスイングの描画（視覚補助のみ）===
+# 確定スイング＝実線、未確定脚＝点線＋薄色。表示期間の外の点は描画範囲でクリップする。
+if show_gann:
+    _sw_bars = completed_bars_for_swing(df, tf)
+    _gann_pts, _gann_pending = calc_gann_swing(_sw_bars)
+    _xmin, _xmax = chart_df.index.min(), chart_df.index.max()
+    # 表示範囲の左端をまたぐ脚を切らないため、範囲外の直前1点も残して線をつなぐ
+    _vis = [(d, p) for d, p in _gann_pts if _xmin <= d <= _xmax]
+    _before = [(d, p) for d, p in _gann_pts if d < _xmin]
+    if _before:
+        _vis = [_before[-1]] + _vis
+    if len(_vis) >= 2:
+        fig.add_trace(go.Scatter(x=[d for d, p in _vis], y=[p for d, p in _vis],
+            mode="lines+markers", name="ギャンスイング（確定）",
+            line=dict(color="#facc15", width=1.6),
+            marker=dict(size=5, color="#facc15"),
+            hovertext=[f"スイング {p:,.2f}" for d, p in _vis], hoverinfo="text+x"), row=1, col=1)
+    if _gann_pending is not None and _vis:
+        # ★未確定脚は必ず点線。実線にすると「進行中の脚まで天底を当てている」ように見える
+        fig.add_trace(go.Scatter(x=[_vis[-1][0], _gann_pending[0]], y=[_vis[-1][1], _gann_pending[1]],
+            mode="lines", name="ギャンスイング（未確定）",
+            line=dict(color="rgba(250,204,21,0.45)", width=1.4, dash="dot"),
+            hovertext=["未確定の脚（転換していないのだ）"] * 2, hoverinfo="text+x"), row=1, col=1)
 
 # === 過去高値/安値の水平ライン（意識される価格帯）===
 if show_hlines and len(chart_df) > 20:
