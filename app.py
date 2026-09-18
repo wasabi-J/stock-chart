@@ -308,6 +308,114 @@ def completed_weekly_closes(s):
         c = c.iloc[:-1]
     return c
 
+# === ギャンスイング（2026-09-18追加・★視覚補助のみ）===
+# ★★この計算結果は大底/天井スコア・週足スコア・アラート・コピー用サマリーに一切入らない。
+#   入れていないことがこの機能の前提条件なので、将来スコアに混ぜたくなったら必ず株式部屋で決めること。
+# 【ルール】判定は終値・描画はヒゲ（High/Low）・スイング本数3。
+#   up中に終値が3本連続で切り下がったらdownへ転換／down中に3本連続で切り上がったらupへ転換。
+#   「連続」は直前バーとの比較で厳密に</>。同値が出たらカウントをリセットする。
+#   転換時、直前の区間で最高値（最安値）を付けたバーのHigh（Low）をスイング点として確定する。
+def calc_gann_swing(cd, n=3):
+    """ギャンスイングの折れ点を返す。
+    戻り値: (confirmed, pending)
+      confirmed = [(日付, 価格, "H"/"L", バー位置), ...] 確定したスイング点（実線で結ぶ）
+      pending   = (日付, 価格) or None 最後の確定点から現在バーまでの未確定脚の終点（点線で結ぶ）
+    ★未確定脚を点線にするのは【過去チャートが「完璧に天底を当てている」ように見える錯覚】を防ぐため。
+      確定したスイング点は「後から振り返れば天底だった」点であり、その時点で分かっていたものではない。
+      未確定脚を実線で描くと、いま進行中の脚まで当たっているように見えてしまう。省略禁止。"""
+    if cd is None or len(cd) < n + 2:
+        return [], None
+    close = cd["close"].values
+    high = cd["high"].values
+    low = cd["low"].values
+    idx = cd.index
+    state = None          # 'up' / 'down'
+    up_cnt = dn_cnt = 0
+    seg_start = 0         # 現在の区間の起点（最後に確定したスイング点のバー位置）
+    points = []
+    for i in range(1, len(close)):
+        if close[i] > close[i-1]:
+            up_cnt += 1
+            dn_cnt = 0
+        elif close[i] < close[i-1]:
+            dn_cnt += 1
+            up_cnt = 0
+        else:                     # 同値はカウントをリセット（厳密に</>で判定する）
+            up_cnt = dn_cnt = 0
+        if state is None:
+            # 初期状態＝最初に3本連続が成立した方向で開始する
+            if up_cnt >= n:
+                state, seg_start, up_cnt, dn_cnt = "up", i, 0, 0
+            elif dn_cnt >= n:
+                state, seg_start, up_cnt, dn_cnt = "down", i, 0, 0
+            continue
+        if state == "up" and dn_cnt >= n:
+            p = seg_start + int(np.argmax(high[seg_start:i+1]))   # up区間の最高値バー
+            points.append((idx[p], float(high[p]), "H", p))
+            state, seg_start, up_cnt, dn_cnt = "down", p, 0, 0
+        elif state == "down" and up_cnt >= n:
+            p = seg_start + int(np.argmin(low[seg_start:i+1]))    # down区間の最安値バー
+            points.append((idx[p], float(low[p]), "L", p))
+            state, seg_start, up_cnt, dn_cnt = "up", p, 0, 0
+    if state is None or not points:
+        return points, None
+    # 未確定脚＝最後の確定点から現在バーまで。終点は進行方向のヒゲを使う
+    last = len(close) - 1
+    pending = (idx[last], float(high[last] if state == "up" else low[last]))
+    return points, pending
+
+def calc_envelope_line(points, kind, last_pos):
+    """包絡線法でトレンドラインを引く（2026-09-18追加・★視覚補助のみ）。
+    【定義】高値側＝全スイング高値がその線【以下】に収まる直線のうち、最も傾きの緩いもの。
+            安値側＝全スイング安値がその線【以上】に収まる直線のうち、最も傾きの緩いもの。
+    【計算】★必ずlog(価格)空間で行う。株価は比率で動くため線形空間で引くと、
+            価格が高い時期ほど線が実態より近く見え、安い時期ほど遠く見えてズレる。
+            対数軸トグルのオン/オフでこの線の位置は変わらない（変わるのは軸の見え方だけ）。
+    【一意性】最後のスイング点を支点にして回すと、有効な線（全点が収まる線）の傾きには上限
+            （高値側）または下限（安値側）があり、その境界がそのまま「最も傾きの緩い線」になる。
+            よって2点で接する直線が一意に決まる＝どれを選ぶかの恣意性がない。
+    戻り値: (x0, y0, x1, y1) バー位置と実価格 / None（スイング点が2つ未満）"""
+    pts = [(pos, price) for _, price, k, pos in points if k == kind and price > 0]
+    if len(pts) < 2:
+        return None
+    xs = np.array([p[0] for p in pts], dtype=float)
+    ys = np.log(np.array([p[1] for p in pts], dtype=float))
+    xn, yn = xs[-1], ys[-1]
+    slopes = [(yn - y) / (xn - x) for x, y in zip(xs[:-1], ys[:-1]) if x < xn]
+    if not slopes:
+        return None
+    slope = min(slopes) if kind == "H" else max(slopes)
+    x0 = float(xs[0])
+    x1 = float(max(last_pos, xn))          # 現在バーまで延長する
+    y0 = yn + slope * (x0 - xn)
+    y1 = yn + slope * (x1 - xn)
+    return x0, float(np.exp(y0)), x1, float(np.exp(y1))
+
+def completed_bars_for_swing(df, tf):
+    """ギャンスイング用に【完成バーのみ】のOHLCを作る。
+    日足＝そのまま／週足＝completed_weekly_closes()に準拠して未完成週を除外／月足＝未完成月を除外。
+    ★進行中のバーを入れるとスイング点が翌日には別の位置に動くため、確定点の意味が壊れる。"""
+    if tf == "日足":
+        return df[["open", "high", "low", "close"]]
+    rule = "W-FRI" if tf == "週足" else "ME"
+    o = df["open"].resample(rule).first()
+    h = df["high"].resample(rule).max()
+    lo = df["low"].resample(rule).min()
+    c = df["close"].resample(rule).last()
+    bars = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
+    if len(bars) == 0:
+        return bars
+    today = pd.Timestamp(datetime.now(JST).date())
+    if tf == "週足":
+        # completed_weekly_closes()と同じ判定＝ラベルの金曜が今日以降なら進行中
+        if bars.index[-1].normalize() >= today:
+            bars = bars.iloc[:-1]
+    else:
+        # 月足＝ラベル(月末)が今日以降なら進行中の月
+        if bars.index[-1].normalize() >= today:
+            bars = bars.iloc[:-1]
+    return bars
+
 @st.cache_data(ttl=3600)
 def load_data(ticker, period="5y"):
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
@@ -1790,114 +1898,6 @@ def make_chart_frame(df, tf):
     cd["macd_signal"] = cd["macd"].ewm(span=9).mean()
     cd["macd_hist"] = cd["macd"] - cd["macd_signal"]
     return cd
-
-# === ギャンスイング（2026-09-18追加・★視覚補助のみ）===
-# ★★この計算結果は大底/天井スコア・週足スコア・アラート・コピー用サマリーに一切入らない。
-#   入れていないことがこの機能の前提条件なので、将来スコアに混ぜたくなったら必ず株式部屋で決めること。
-# 【ルール】判定は終値・描画はヒゲ（High/Low）・スイング本数3。
-#   up中に終値が3本連続で切り下がったらdownへ転換／down中に3本連続で切り上がったらupへ転換。
-#   「連続」は直前バーとの比較で厳密に</>。同値が出たらカウントをリセットする。
-#   転換時、直前の区間で最高値（最安値）を付けたバーのHigh（Low）をスイング点として確定する。
-def calc_gann_swing(cd, n=3):
-    """ギャンスイングの折れ点を返す。
-    戻り値: (confirmed, pending)
-      confirmed = [(日付, 価格, "H"/"L", バー位置), ...] 確定したスイング点（実線で結ぶ）
-      pending   = (日付, 価格) or None 最後の確定点から現在バーまでの未確定脚の終点（点線で結ぶ）
-    ★未確定脚を点線にするのは【過去チャートが「完璧に天底を当てている」ように見える錯覚】を防ぐため。
-      確定したスイング点は「後から振り返れば天底だった」点であり、その時点で分かっていたものではない。
-      未確定脚を実線で描くと、いま進行中の脚まで当たっているように見えてしまう。省略禁止。"""
-    if cd is None or len(cd) < n + 2:
-        return [], None
-    close = cd["close"].values
-    high = cd["high"].values
-    low = cd["low"].values
-    idx = cd.index
-    state = None          # 'up' / 'down'
-    up_cnt = dn_cnt = 0
-    seg_start = 0         # 現在の区間の起点（最後に確定したスイング点のバー位置）
-    points = []
-    for i in range(1, len(close)):
-        if close[i] > close[i-1]:
-            up_cnt += 1
-            dn_cnt = 0
-        elif close[i] < close[i-1]:
-            dn_cnt += 1
-            up_cnt = 0
-        else:                     # 同値はカウントをリセット（厳密に</>で判定する）
-            up_cnt = dn_cnt = 0
-        if state is None:
-            # 初期状態＝最初に3本連続が成立した方向で開始する
-            if up_cnt >= n:
-                state, seg_start, up_cnt, dn_cnt = "up", i, 0, 0
-            elif dn_cnt >= n:
-                state, seg_start, up_cnt, dn_cnt = "down", i, 0, 0
-            continue
-        if state == "up" and dn_cnt >= n:
-            p = seg_start + int(np.argmax(high[seg_start:i+1]))   # up区間の最高値バー
-            points.append((idx[p], float(high[p]), "H", p))
-            state, seg_start, up_cnt, dn_cnt = "down", p, 0, 0
-        elif state == "down" and up_cnt >= n:
-            p = seg_start + int(np.argmin(low[seg_start:i+1]))    # down区間の最安値バー
-            points.append((idx[p], float(low[p]), "L", p))
-            state, seg_start, up_cnt, dn_cnt = "up", p, 0, 0
-    if state is None or not points:
-        return points, None
-    # 未確定脚＝最後の確定点から現在バーまで。終点は進行方向のヒゲを使う
-    last = len(close) - 1
-    pending = (idx[last], float(high[last] if state == "up" else low[last]))
-    return points, pending
-
-def calc_envelope_line(points, kind, last_pos):
-    """包絡線法でトレンドラインを引く（2026-09-18追加・★視覚補助のみ）。
-    【定義】高値側＝全スイング高値がその線【以下】に収まる直線のうち、最も傾きの緩いもの。
-            安値側＝全スイング安値がその線【以上】に収まる直線のうち、最も傾きの緩いもの。
-    【計算】★必ずlog(価格)空間で行う。株価は比率で動くため線形空間で引くと、
-            価格が高い時期ほど線が実態より近く見え、安い時期ほど遠く見えてズレる。
-            対数軸トグルのオン/オフでこの線の位置は変わらない（変わるのは軸の見え方だけ）。
-    【一意性】最後のスイング点を支点にして回すと、有効な線（全点が収まる線）の傾きには上限
-            （高値側）または下限（安値側）があり、その境界がそのまま「最も傾きの緩い線」になる。
-            よって2点で接する直線が一意に決まる＝どれを選ぶかの恣意性がない。
-    戻り値: (x0, y0, x1, y1) バー位置と実価格 / None（スイング点が2つ未満）"""
-    pts = [(pos, price) for _, price, k, pos in points if k == kind and price > 0]
-    if len(pts) < 2:
-        return None
-    xs = np.array([p[0] for p in pts], dtype=float)
-    ys = np.log(np.array([p[1] for p in pts], dtype=float))
-    xn, yn = xs[-1], ys[-1]
-    slopes = [(yn - y) / (xn - x) for x, y in zip(xs[:-1], ys[:-1]) if x < xn]
-    if not slopes:
-        return None
-    slope = min(slopes) if kind == "H" else max(slopes)
-    x0 = float(xs[0])
-    x1 = float(max(last_pos, xn))          # 現在バーまで延長する
-    y0 = yn + slope * (x0 - xn)
-    y1 = yn + slope * (x1 - xn)
-    return x0, float(np.exp(y0)), x1, float(np.exp(y1))
-
-def completed_bars_for_swing(df, tf):
-    """ギャンスイング用に【完成バーのみ】のOHLCを作る。
-    日足＝そのまま／週足＝completed_weekly_closes()に準拠して未完成週を除外／月足＝未完成月を除外。
-    ★進行中のバーを入れるとスイング点が翌日には別の位置に動くため、確定点の意味が壊れる。"""
-    if tf == "日足":
-        return df[["open", "high", "low", "close"]]
-    rule = "W-FRI" if tf == "週足" else "ME"
-    o = df["open"].resample(rule).first()
-    h = df["high"].resample(rule).max()
-    lo = df["low"].resample(rule).min()
-    c = df["close"].resample(rule).last()
-    bars = pd.DataFrame({"open": o, "high": h, "low": lo, "close": c}).dropna(subset=["close"])
-    if len(bars) == 0:
-        return bars
-    today = pd.Timestamp(datetime.now(JST).date())
-    if tf == "週足":
-        # completed_weekly_closes()と同じ判定＝ラベルの金曜が今日以降なら進行中
-        if bars.index[-1].normalize() >= today:
-            bars = bars.iloc[:-1]
-    else:
-        # 月足＝ラベル(月末)が今日以降なら進行中の月
-        if bars.index[-1].normalize() >= today:
-            bars = bars.iloc[:-1]
-    return bars
 
 cframe = make_chart_frame(df, tf)
 
