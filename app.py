@@ -1017,8 +1017,31 @@ def _cluster_signals(d, kind="bottom", thr=9, gap=10):
 
 def _count_bottom9_clusters(d):
     """その銘柄で大底9以上が過去に何回点灯したかを数える（10営業日以内の連続は1回に集約）。
-    検証4「その銘柄で初の大底9か」の自動判定に使う。★数え方は_cluster_signalsに統一済み。"""
+    ★数え方は_cluster_signalsに統一済み。★検証4の判定にはこれを直接使わず、count_bottom9_full()を使うこと。"""
     return len(_cluster_signals(d, kind="bottom", thr=9))
+
+@st.cache_data(ttl=3600)
+def count_bottom9_full(ticker):
+    """検証4専用：大底9以上の点灯回数を【全期間（period="max"）】で数える（2026-10-15追加）。
+    ★背景＝KTOSの検証4が9/29「✕消化済(2回目)」→10/14「◎初点灯」と、回数が減る矛盾が起きた。
+      原因は5yデータで数えていたこと。しかも先頭260本はMA200等の助走で数えないため、
+      実際に数えていたのは【直近約4年】だけだった。日付が進むと古い点灯が窓の外へ押し出される。
+      KTOSでは2022-10-12の安値（$9.31・市場全体の底）付近の点灯が、9/29→10/14の間に窓から外れた。
+    ★バックテストの検証4（初点灯 勝率73.3%）は全期間の初点灯で集計した数字なので、窓を区切ると
+      長い歴史のある銘柄で「偽の◎初点灯」が出る。◎初点灯はティアS（枠6万）の根拠なので致命的。
+    ★スコア計算・チャートの点灯マーカーなど他は5yのまま。全期間で数えるのは検証4の回数だけ。
+    戻り値: {"n": 回数, "first": 初回日, "last": 最終日, "start": データ開始日} / None（取得失敗）"""
+    try:
+        d = load_data(ticker, "max")
+        if d is None:
+            return None
+        cl = _cluster_signals(d, kind="bottom", thr=9)
+        return {"n": len(cl),
+                "first": cl[0][0] if cl else None,
+                "last": cl[-1][0] if cl else None,
+                "start": d.index[0]}
+    except Exception:
+        return None
 
 @st.cache_data(ttl=3600)
 def bulk_signal_row(ticker, period="5y"):
@@ -1036,7 +1059,9 @@ def bulk_signal_row(ticker, period="5y"):
         trend = monthly_trend_direction(ticker, "5y")  # ★"max"だと二重ダウンロードになる
         div = divergence_signals(d)
         to, liq, tsym = check_liquidity(d, ticker)
-        n9 = _count_bottom9_clusters(d)
+        # 検証4は全期間で数える（5y窓だと古い点灯が押し出されて偽の◎初点灯が出る）
+        _full = count_bottom9_full(ticker)
+        n9 = _full["n"] if _full is not None else None
         return {
             "date": d.index[-1].strftime("%Y-%m-%d"),
             "price": float(r["close"]), "sym": tsym or ("¥" if ".T" in ticker else "$"),
@@ -1413,6 +1438,8 @@ with st.expander(f"📋 点灯銘柄の一括出力（大底8以上 {len(_lit)}�
                         return f"{r['pbr']:.2f}倍" if r["pbr"] else "-"
                     # 検証4の自動判定（今回の点灯を含めて1回目なら初点灯）
                     def _v4(r):
+                        if r["n9"] is None:
+                            return "⚠️全期間取得失敗"   # 取得失敗を◎初点灯と誤表示しないため
                         if r["bs"] >= 9 and r["n9"] <= 1:
                             return "◎初点灯"
                         if r["bs"] >= 9:
@@ -1875,12 +1902,17 @@ with st.expander("📄 コピー用サマリー（Claude相談用・タップで
     _mom_txt += f"（6ヶ月 {_ret6:+.1f}%）" if _ret6 is not None else ""
 
     # 大底9以上の点灯履歴（検証4＝初点灯かの判定材料）
-    if sig_bottoms:
-        _b_dates = [d.strftime("%Y-%m-%d") for d, p, s in sig_bottoms]
-        _hist_txt = f"データ期間({period})内 {len(sig_bottoms)}回 / 最終 {_b_dates[-1]}"
-        _hist_txt += f" / 初回 {_b_dates[0]}"
+    # ★2026-10-15：全期間（max）で数えるように変更。チャート時間軸・データ期間の選択とは無関係に常に全期間
+    _full9 = count_bottom9_full(ticker)
+    if _full9 is None:
+        _hist_txt = "⚠️全期間データの取得に失敗（検証4は判定不能・◎初点灯とみなさないこと）"
+    elif _full9["n"] > 0:
+        _hist_txt = (f"全期間({_full9['start'].strftime('%Y-%m')}〜)で {_full9['n']}回 / "
+                     f"最終 {_full9['last'].strftime('%Y-%m-%d')} / 初回 {_full9['first'].strftime('%Y-%m-%d')}")
+        if _full9["n"] <= 1 and bottom_score >= 9:
+            _hist_txt += " ← ◎初点灯（バックテスト勝率73.3%）"
     else:
-        _hist_txt = f"データ期間({period})内 0回 ← 初点灯なら◎高信頼(的中率99%)"
+        _hist_txt = f"全期間({_full9['start'].strftime('%Y-%m')}〜)で 0回"
 
     if _to is not None:
         _liq_disp = f"{_tsym}{_to/1e8:.1f}億/日" if _tsym == "¥" else f"{_tsym}{_to/1e6:.0f}百万/日"
