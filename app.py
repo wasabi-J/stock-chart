@@ -302,11 +302,17 @@ for _gname in list(GROUPS.keys()):
 _watch = GROUPS.pop("📁 監視")
 _watch_us = {k: v for k, v in _watch.items() if not v.endswith(".T")}
 _watch_jp = {k: v for k, v in _watch.items() if v.endswith(".T")}
+# ★2026-10-24：米国株が125件に増えたので頭文字でA〜K／L〜Zに二分した。
+#   境目を頭文字で固定するのは、件数で半分に割ると銘柄追加のたびに境目が動き、
+#   他の銘柄が別グループへ引っ越して探しにくくなるため。
+_watch_us_ak = {k: v for k, v in _watch_us.items() if v[0].upper() <= "K"}
+_watch_us_lz = {k: v for k, v in _watch_us.items() if v[0].upper() > "K"}
 _reordered = {}
 for _k, _v in GROUPS.items():
     _reordered[_k] = _v
     if _k == "📁 保有中":  # 監視は保有中の直後に戻す（📁短期戦略はKRUS売却で2026-09-18に廃止）
-        _reordered[f"📁 監視・米国株（{len(_watch_us)}）"] = _watch_us
+        _reordered[f"📁 監視・米国株A〜K（{len(_watch_us_ak)}）"] = _watch_us_ak
+        _reordered[f"📁 監視・米国株L〜Z（{len(_watch_us_lz)}）"] = _watch_us_lz
         _reordered[f"📁 監視・日本株（{len(_watch_jp)}）"] = _watch_jp
 GROUPS = _reordered
 
@@ -1179,7 +1185,7 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **検証済(対象外)**: SOXL/QS/TSLL/TTD/1458/2869/MSTUは🔬対象外＝バケットの件数と一括出力に含めない。SOXL=レバETFゆえ🔥確定演出級のみC枠SL必須・VIX<25の点灯は無視（VIX≥25限定で9戦7勝EV+36.7%／VIX<25は4戦全敗）。QS=赤字構造でSTEP2弾き。TSLL=システム外の裁量枠（別財布）で登録目的は$7割れの検知のみ。TTD=バリュエーション・リセット型（PER297倍→17倍の縮小がそのまま-89%の株価下落に一致）で大底スコアが効かないと決着済み・観察はEPSと月足downの2点のみ。MSTU=MSTRの日次2倍ETFで宝くじ枠（別財布5万・システム外）＝TSLLと同じ扱い。
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
-**モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上部の出口ステータスで損切りラインを毎回更新して確認する。
+**モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上段の🛡️保有銘柄のシグナル一覧でMA200乖離を毎回確認する（+5%以下で🟡・割れで🔴）。
 **🆕銘柄**: 2026-10-24の週次スクリーニング通過組（16件）＋MSTU（宝くじ枠・🔬対象外）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDR（8/29組）はIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
 **同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP/LULU/AEO/BROS/CHWY/THO/8267　②建材・住宅・建設=BLDR/SITE/LII/PNR/AAON/IBP/POOL/RH/ROAD/WHR/WSC/ACM/AMTM/TGLS/1801/1835/1885/1893/6366　③コモディティ=GLD/SLV/COPX/GDX/NEM（＋1328保有）　④中国ADR=BABA/TME/BILI/BIDU/QFIN/TCOM/PDD/CYD(NYSE上場・事業は中国)（LEGNも中国系バイオで規制リスクを共有・TCOMはTRIPとも旅行で重なる）　⑤プリント基板=4971メック(薬品)/6278ユニオンツール(ドリル)/5706三井金属(極薄銅箔)/6787メイコー(基板本体)＝川上から川下まで同じ需要で動く　⑥住宅ローン・不動産=RKT/PFSI/WD/CIGI/CSGP/Z　⑦インド=HDB/INFY/WIT　⑧エネルギー=XLE/CRK(天然ガス)/NRG(電力)/LEU(ウラン濃縮)　⑨自動車=APTV/DCH/7220武蔵精密/GPI(ディーラー)　⑩光通信=IPGP/FN　⑪医療機器=BSX/PODD　⑫通信設備投資=CALX(機器)/DY(工事)　⑬太陽光=FSLR/ENPH　⑭医療保険=ALHC/HUM　⑮セキュリティ=CRWD/OKTA　⑯決済=FIS/FISV　⑰電力・送電網=AMSC/HE/MTZ/DY(工事)　⑱カジノ=LVS/MGM/WYNN　⑲防衛・航空=BWXT(米海軍の原子炉)/7013IHI。★空調はLIIとAAONが直接の競合なのだ。**これらは上限ではなく注意**＝VIX30では塊ごと同時点灯するので、複数買うと分散したつもりで分散になっていないのだ（2026-09-26に記述を是正）。
 **★★2695くら寿司とKRUSは親子会社**: KRUSは2695の子会社。両方持つのは分散ではなく同じ会社への二重露出なのだ。★KRUSは2026-09に逆指値発動で売却済みなので、現在この衝突は解消しているのだ（📁短期戦略はこれに伴い廃止）。
@@ -1211,6 +1217,85 @@ _hm = _now_jst.hour * 60 + _now_jst.minute
 if _hm >= 22 * 60 + 30 or _hm < 5 * 60:
     st.warning("⚠️ 今は米国市場の取引時間中なのだ。表示中の米国株スコアは**前営業日の確定値**で、"
                "今まさに動いている値動きは反映されていないのだ。判断は米国の引け後（日本時間の朝）に行うのだ")
+
+# === 🛡️ 保有銘柄のシグナル一覧（2026-10-24追加・最上段）===
+# 目的＝「保有銘柄にシグナルが出ているか」をページを開いた瞬間に分かるようにする。★表示のみで判定は変えない。
+# 旧「⛔天井シグナル」枠（全銘柄の天井一覧）と「モメンタム出口ステータス」枠はこの一覧に統合して廃止した。
+# 【色の基準】
+#   逆張り柱の保有＝大底8・天井7で🟡警戒／大底9以上・天井8以上で🔴点灯
+#   モメンタム柱の保有＝大底・天井では色を付けず、MA200乖離だけで判定（出口はMA200割れのみだから）
+#                       乖離+5%以下で🟡接近／0%割れ（MA200割れ）で🔴売り
+_scan_map = {_tk: (_bs, _ts) for _lb, _tk, _bs, _ts in scan}
+_held_rows = []      # 表に出す行
+_held_alerts = []    # 起動時ポップアップに出す文（🔴のうち要対応のもの）
+for _lb, _tk in GROUPS["📁 保有中"].items():
+    _short = _lb.split("（")[0].strip()
+    _bt = _scan_map.get(_tk)
+    _bs_s = str(_bt[0]) if _bt else "-"
+    _ts_s = str(_bt[1]) if _bt else "-"
+    _dev_s = ""
+    if _tk in MOMENTUM_HELD:
+        _ms = momentum_exit_status(_tk)
+        if _ms is None:
+            _stat = "⚠️取得失敗"
+        else:
+            _dev_s = f"{_ms['dev']:+.1f}%"
+            if _ms["dev"] < 0:
+                _stat = "🔴MA200割れ＝売り"
+                _held_alerts.append(f"🔴 **{_short}**（モメンタム柱）：MA200割れ（乖離{_ms['dev']:+.1f}%）→ 出口条件成立なのだ")
+            elif _ms["dev"] <= 5:
+                _stat = "🟡MA200接近"
+            else:
+                _stat = "✅"
+    elif _bt is None:
+        _stat = "⚠️取得失敗"
+    else:
+        _bs, _ts = _bt
+        _marks = []
+        if _bs >= 9:
+            _marks.append(f"🔴大底{_bs}")
+            _held_alerts.append(f"🟢 **{_short}**：大底{_bs}点灯 → 買い増しの判断材料なのだ")
+        elif _bs == 8:
+            _marks.append("🟡大底8")
+        if _ts >= 8:
+            _marks.append(f"🔴天井{_ts}")
+            _held_alerts.append(f"🔴 **{_short}**：天井{_ts}点灯 → 利確・リスク管理を検討するのだ")
+        elif _ts == 7:
+            _marks.append("🟡天井7")
+        _stat = "　".join(_marks) if _marks else "✅"
+    _kind = "モメンタム" if _tk in MOMENTUM_HELD else "逆張り"
+    _held_rows.append((_short, _kind, _bs_s, _ts_s, _dev_s, _stat))
+
+_ht = ["<div style='font-size:0.78em;font-weight:700;margin:2px 0;'>🛡️ 保有銘柄のシグナル</div>",
+       "<table style='font-size:0.74em;width:100%;border-collapse:collapse;margin-bottom:6px;'>",
+       "<tr style='opacity:0.7;'><th style='text-align:left;'>銘柄</th><th>柱</th><th>大底</th>"
+       "<th>天井</th><th>MA200乖離</th><th style='text-align:left;'>状態</th></tr>"]
+for _s, _k, _b, _t, _d, _st in _held_rows:
+    _ht.append(f"<tr><td>{_s}</td><td style='text-align:center;'>{_k}</td>"
+               f"<td style='text-align:center;'>{_b}</td><td style='text-align:center;'>{_t}</td>"
+               f"<td style='text-align:center;'>{_d or '-'}</td><td>{_st}</td></tr>")
+_ht.append("</table>")
+st.markdown("".join(_ht), unsafe_allow_html=True)
+st.caption("逆張り＝大底8・天井7で🟡／大底9以上・天井8以上で🔴。"
+           "モメンタム＝MA200乖離+5%以下で🟡／MA200割れで🔴（大底・天井では色を付けないのだ）")
+
+# === 🚨 起動時ポップアップ（2026-10-24追加・プッシュ通知の代わり）===
+# ★iPhoneのSafariはWebページからのバイブ・自動の音を許さないので、閉じるまで消えないモーダルで知らせる。
+# ★同じセッション中は1回だけ出す（ボタン操作のたびの再表示を防ぐ）。
+#   対象＝逆張り保有の天井8以上・大底9以上（買い増し用）／モメンタム保有のMA200割れ。
+def _held_alert_body(items):
+    for _m in items:
+        st.markdown(_m)
+    st.caption("相談はClaudeへ。右上の×で閉じると、この起動中はもう出ないのだ")
+
+_dialog_deco = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
+if _held_alerts and not st.session_state.get("held_alert_shown"):
+    st.session_state["held_alert_shown"] = True
+    if _dialog_deco is not None:
+        _dialog_deco("🚨 保有銘柄にシグナルが出ているのだ")(_held_alert_body)(_held_alerts)
+    else:
+        # 古いStreamlitでモーダルが使えない時の保険
+        st.error("🚨 **保有銘柄にシグナルが出ているのだ**\n\n" + "\n\n".join(_held_alerts))
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
 # 背景：母集団201銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
@@ -1359,51 +1444,7 @@ if _mom_ok:
                "⑥終値ベース　⑦1銘柄¥1〜2万（Tier C）　⑧同時保有2銘柄まで。"
                "中央値はほぼゼロで利益は右の裾から来るホームラン型なのだ")
 
-# --- ⛔天井シグナル（保有銘柄でのみ意味を持つ）---
-_tops = []
-for _lb, _tk, _bs, _ts in scan:
-    if _ts >= 7 and _tk not in ("^VIX", "^TNX"):
-        _tops.append((_lb.split("（")[0].strip(), _tk, _ts, _tk in HELD_TICKERS))
-if _tops:
-    _tops.sort(key=lambda x: (-x[2], _name_sort_key(x[1])))
-    _held_top = [t for t in _tops if t[3]]
-    with st.expander(f"⛔ 天井シグナル（{len(_tops)}件"
-                     + (f"・うち保有{len(_held_top)}件" if _held_top else "") + "）", expanded=bool(_held_top)):
-        for _s, _tk, _ts, _hd in _tops:
-            _mk = "⛔フル" if _ts >= 9 else ("🔴売り" if _ts == 8 else "⚠️警戒")
-            if _hd:
-                st.markdown(f"- **{_s}**　{_mk}（{_ts}/9）　`保有`")
-            else:
-                st.markdown(f"- {_s}　{_mk}（{_ts}/9）")
-        st.caption("天井のビタ当ては不可能(AUC0.549)で天井売りは早売り。モメンタム柱の出口はMA200割れのみ、"
-                   "逆張りは含み益＋天井の時だけ意味を持つのだ")
-
-# === モメンタム柱の出口ステータス（常時表示）===
-# 出口はMA200割れで即売り、これのみ。利確ラインなし。
-# MA200は日々動くので損切りラインは固定せず、ここで毎回更新して確認する。
-# 監視頻度＝乖離が大きいうちは週次、MA200に近づいたら日次に切り替える二段構え。
-if MOMENTUM_HELD:
-    st.divider()
-    st.markdown("<div style='font-size:0.85em;font-weight:700;margin:2px 0;'>🚀 モメンタム柱の出口ステータス（出口はMA200割れのみ）</div>", unsafe_allow_html=True)
-    for _mtk, _mname in MOMENTUM_HELD.items():
-        _ms = momentum_exit_status(_mtk)
-        if _ms is None:
-            st.warning(f"{_mname}：データ取得に失敗したのだ（次の更新で再取得される）")
-            continue
-        _msym = "¥" if (".T" in _mtk or _mtk.startswith("^N")) else "$"
-        _mc = st.columns(4)
-        _mc[0].metric(f"{_mname} 現在値", f"{_msym}{_ms['price']:,.0f}")
-        _mc[1].metric("日足MA200（損切りライン）", f"{_msym}{_ms['ma200']:,.0f}")
-        _mc[2].metric("MA200乖離率", f"{_ms['dev']:+.1f}%")
-        _mc[3].metric("損切りまで", f"{_ms['dist']:+.1f}%")
-        if _ms["dev"] < 0:
-            st.error(f"🚨 **{_mname}：MA200を割れた（乖離{_ms['dev']:+.1f}%）→ 出口条件成立。即売りを執行するのだ**")
-        elif _ms["dev"] < 10:
-            st.warning(f"⚠️ {_mname}：MA200まであと{_ms['dist']:.1f}%＝接近中。**監視を日次に切り替え**るのだ")
-        elif _ms["dev"] < 20:
-            st.info(f"📊 {_mname}：MA200まであと{_ms['dist']:.1f}%。そろそろ日次監視への切り替えを意識するのだ")
-        else:
-            st.caption(f"✅ {_mname}：乖離{_ms['dev']:+.1f}%と余裕あり＝**週次監視で十分**なのだ（データ最終日 {_ms['date'].strftime('%Y-%m-%d')}）")
+# ※「⛔天井シグナル」枠と「モメンタム柱の出口ステータス」枠は2026-10-24に廃止し、最上段の🛡️保有銘柄のシグナル一覧に統合した
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
 # 一斉点灯時に1銘柄ずつ相談すると往復が増えるため、選んだ銘柄をまとめて表に出す。
