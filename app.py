@@ -12,6 +12,32 @@ JST = timezone(timedelta(hours=9))
 
 st.set_page_config(page_title="大底・天井スコア", layout="wide")
 
+# === データの区切り（2026-10-25追加・起動を軽くするため）===
+# キャッシュの期限を1時間→6時間に延ばした。日足は1日1回しか確定しないので、1時間ごとに
+# 201銘柄を取り直す必要はないため。
+# ★ただし6時間をそのまま使うと、夜に開いた時の途中経過の値を翌朝まで持ち越してしまう。
+#   そこで【米国の引け後（06:15）】と【日本の引け後（15:45）】を区切りにして、
+#   区切りをまたいだ最初のアクセスでキャッシュを全部捨てる。朝と夕方は必ず確定値を取り直すのだ。
+def _data_epoch(now):
+    t = now.hour * 60 + now.minute
+    d = now.date()
+    if t < 6 * 60 + 15:
+        return f"{d - timedelta(days=1)}-PM"
+    if t < 15 * 60 + 45:
+        return f"{d}-AM"
+    return f"{d}-PM"
+
+@st.cache_resource
+def _epoch_holder():
+    return {"epoch": None}
+
+_eh = _epoch_holder()
+_ep = _data_epoch(datetime.now(JST))
+if _eh["epoch"] != _ep:
+    if _eh["epoch"] is not None:
+        st.cache_data.clear()
+    _eh["epoch"] = _ep
+
 GROUPS = {
     "📁 保有中": {
         "COIN（コインベース）": "COIN",
@@ -542,7 +568,7 @@ def completed_bars_for_swing(df, tf):
             bars = bars.iloc[:-1]
     return bars
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def load_data(ticker, period="5y"):
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     if df.empty:
@@ -606,7 +632,7 @@ def load_data(ticker, period="5y"):
 # === PER・PBR取得（trailingPE優先＋株価÷EPSでクロスチェック）===
 # 注意：yfinanceの.infoは「現在時点のスナップショット」であり過去PERは取得できない。
 # 赤字銘柄はtrailingPEがNone/負になるためN/A扱いとし、PBRを併記して判断材料にする。
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def get_per_pbr(ticker):
     """PER・PBRを取得。
     戻り値: (per, pbr, is_estimated) ※is_estimated=Trueは株価÷EPSの手計算フォールバック"""
@@ -739,7 +765,7 @@ def calc_weekly_bottom_score(df):
     except Exception:
         return None, False
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def scan_all():
     """全銘柄スキャン。結果に加えて【取得メタ情報】も返す。
     戻り値: (results, meta)
@@ -770,7 +796,7 @@ def scan_all():
     return results, meta
 
 # === フル点灯（大底10/10・天井9/9）の履歴を全銘柄ぶん集計（直近1年）===
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def scan_full_history(days_back=365):
     """全登録銘柄について、直近days_back日のフル点灯（大底10/10・天井9/9）を集める。
     連続点灯はクラスタ化して1イベント1行にまとめる。各クラスタは点灯した最初の日を代表とする。"""
@@ -826,7 +852,7 @@ def scan_full_history(days_back=365):
     events.sort(key=lambda e: e[0], reverse=True)
     return events
 # === モメンタムシグナル一覧（expander展開時のみ計算）===
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def scan_momentum():
     """全登録銘柄のモメンタム判定を集計。判定に必要なのは6ヶ月上昇率とMA200のみなので
     直近200日あれば足りる。
@@ -875,7 +901,7 @@ def scan_momentum():
 # トレンドラインが効かない銘柄（暗号資産・高ボラ株）。これらはトレンド方向フィルター対象外
 TREND_EXCLUDE = {"COIN","MSTR","MARA","CLSK","RIOT","BTDR","SOXL","QS","SOFI"}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def monthly_trend_direction(ticker, period="max"):
     """月足の移動チャネル（窓18ヶ月・相関0.3以上）で、直近のトレンド方向を判定。
     戻り値: 'up'（上昇）/ 'down'（下降）/ 'range'（レンジ）/ None（対象外・データ不足）
@@ -934,7 +960,7 @@ def momentum_signal(df):
     except Exception:
         return None
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def momentum_exit_status(ticker):
     """モメンタム柱の保有銘柄について、出口(日足MA200割れ)までの距離を算出。
     戻り値: dict{price, ma200, dev(乖離率%), dist(損切りまで何%下がるか), date} / None
@@ -1021,7 +1047,7 @@ def is_high_vol(df):
     except Exception:
         return False
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def get_vix_level():
     """現在のVIX水準を取得"""
     try:
@@ -1073,7 +1099,7 @@ def _count_bottom9_clusters(d):
     ★数え方は_cluster_signalsに統一済み。★検証4の判定にはこれを直接使わず、count_bottom9_full()を使うこと。"""
     return len(_cluster_signals(d, kind="bottom", thr=9))
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def count_bottom9_full(ticker):
     """検証4専用：大底9以上の点灯回数を【全期間（period="max"）】で数える（2026-10-15追加）。
     ★背景＝KTOSの検証4が9/29「✕消化済(2回目)」→10/14「◎初点灯」と、回数が減る矛盾が起きた。
@@ -1096,7 +1122,7 @@ def count_bottom9_full(ticker):
     except Exception:
         return None
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def bulk_signal_row(ticker, period="5y"):
     """一括出力テーブル1行分のデータをまとめて取得する。
     戻り値: dict / None（データ不足）"""
@@ -1130,7 +1156,7 @@ def bulk_signal_row(ticker, period="5y"):
     except Exception:
         return None
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def bucket_row_info(ticker):
     """バケット表示の1行に出す4項目（週足スコア・月足トレンド・年率ボラ）を取得。
     判断を決めているのは実質この4つ（買いライン大底9・足切り週足5・決定打は月足・VIX30時はボラ45%以上）。
@@ -1196,7 +1222,7 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
 
-with st.spinner("登録銘柄をスキャン中（初回は95秒ほど）..."):
+with st.spinner("登録銘柄をスキャン中（朝6:15と夕方15:45の後の初回だけ時間がかかるのだ）..."):
     scan, scan_meta = scan_all()
 
 # === データの鮮度表示（2026-08-18追加）===
@@ -1612,9 +1638,18 @@ with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜
 # === フル点灯の履歴（折りたたみ・直近1年・保有銘柄を強調）===
 with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井9/9のみ）"):
     st.caption("多忙・体調不良で見逃した時の回収用。保有銘柄を最上部に強調表示。")
-    with st.spinner("履歴を集計中..."):
-        full_events = scan_full_history(365)
-    if not full_events:
+    # ★2026-10-25：expanderは閉じていても中身が実行されるため、起動のたびに201銘柄×1年分を
+    #   計算していた（起動が重い原因の1つ）。ボタンを押した時だけ集計するように変えた。表示のみで判定は不変。
+    if not st.session_state.get("show_full_hist"):
+        st.button("🏆 履歴を集計する（初回は数十秒かかるのだ）", key="btn_full_hist",
+                  on_click=lambda: st.session_state.update(show_full_hist=True))
+        full_events = None
+    else:
+        with st.spinner("履歴を集計中..."):
+            full_events = scan_full_history(365)
+    if full_events is None:
+        pass
+    elif not full_events:
         st.info("直近1年でフル点灯（満点）はなかったのだ。")
     else:
         held_events = [e for e in full_events if e[4]]
@@ -1953,7 +1988,7 @@ with st.expander("🔍 RSI検算パネル（Wilder実装の自己検証・タッ
 # ★2026-08-20修正2：数え方を_cluster_signalsに統一（フル点灯だけ個別に残す例外を廃止）。
 #   これで一括出力の点灯回数とサマリーの点灯回数が必ず一致する。
 #   💎マーカーはクラスタ内の最高スコアで判定するので、フル点灯の視認性は失われない。
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def calc_signal_history(_df, ticker_key, period):
     bottom_days = _cluster_signals(_df, kind="bottom", thr=9)
     top_days = _cluster_signals(_df, kind="top", thr=8)
@@ -2103,8 +2138,8 @@ cframe = make_chart_frame(df, tf)
 
 # === チャート表示設定（2026-09-18・トグルを1箇所に集約）===
 # ★key=を付けるとStreamlitがsession_stateで状態を保持するので、銘柄を切り替えてもチェックが外れない。
-# ★トグル操作はre-runを起こすが、load_dataに@st.cache_data(ttl=3600)が付いているので
-#   yfinanceへの再取得は発生しない（1時間以内なら再計算のみ＝待ち時間なし）。
+# ★トグル操作はre-runを起こすが、load_dataに@st.cache_data(ttl=21600)が付いているので
+#   yfinanceへの再取得は発生しない（区切り時刻をまたがなければ再計算のみ＝待ち時間なし）。
 with st.expander("▶ チャート表示設定", expanded=False):
     st.checkbox("📈 価格軸を対数にする", value=False, key="cs_log",
         help="価格パネルのみ対数。RSIとMACDは線形のまま（0〜100の有界指標と振動指標なので対数の意味がない）のだ")
