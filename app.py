@@ -343,6 +343,8 @@ for _k, _v in GROUPS.items():
 GROUPS = _reordered
 
 ALL_TICKERS = [(label, tk) for g in GROUPS.values() for label, tk in g.items()]
+_ALL_TICKER_TUPLE = tuple(tk for _, tk in ALL_TICKERS)   # 一括ダウンロード用（順序固定でキャッシュキーを安定させる）
+_ALL_TICKER_SET = set(_ALL_TICKER_TUPLE)
 
 # 🔬対象外＝スコアが点いても買い判断に使わない銘柄。バケットの件数から除外する
 # （件数が水増しされると「今日は何件見るべきか」の体感が狂うため）。表示自体は参考枠で残す。
@@ -568,10 +570,44 @@ def completed_bars_for_swing(df, tf):
             bars = bars.iloc[:-1]
     return bars
 
+# === 登録銘柄の一括ダウンロード（2026-10-25追加・起動を軽くするため）===
+# 旧実装は201銘柄を1つずつyf.downloadしており、通信の往復が201回あった。ここで1回にまとめて並列で取る。
+# ★取ってくるデータ自体は1銘柄ずつ取った時と同じ（auto_adjust=Trueも同じ）＝判定は変わらない。
+# ★cache_resourceにしたのは、cache_dataだと呼ぶたびに201銘柄分を丸ごとコピーして逆に重くなるため。
+#   引数のepochは朝6:15／夕方15:45の区切り（_data_epoch）で、区切りをまたぐと自動で取り直す。
+# ★一括取得に失敗した銘柄は、load_data側で従来どおり1銘柄ずつ取りに行く（保険）。
+@st.cache_resource(max_entries=2)
+def _bulk_download(tickers, period, epoch):
+    out = {}
+    try:
+        raw = yf.download(list(tickers), period=period, auto_adjust=True, progress=False,
+                          group_by="ticker", threads=True)
+    except Exception:
+        return out
+    if raw is None or raw.empty or not isinstance(raw.columns, pd.MultiIndex):
+        return out
+    lv0 = set(raw.columns.get_level_values(0))
+    for tk in tickers:
+        if tk not in lv0:
+            continue
+        try:
+            sub = raw[tk].dropna(how="all")
+            if len(sub):
+                out[tk] = sub
+        except Exception:
+            continue
+    return out
+
 @st.cache_data(ttl=21600)
 def load_data(ticker, period="5y"):
-    df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
-    if df.empty:
+    df = None
+    if period == "5y" and ticker in _ALL_TICKER_SET:
+        _b = _bulk_download(_ALL_TICKER_TUPLE, "5y", _data_epoch(datetime.now(JST)))
+        if ticker in _b:
+            df = _b[ticker].copy()
+    if df is None or df.empty:
+        df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+    if df is None or df.empty:
         return None
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -1198,6 +1234,7 @@ st.markdown("<style>[data-testid='stMetricDelta']{font-size:1.15rem !important;}
 # 押すとキャッシュを全クリアして最新データで再実行する
 if st.button("🔄 データ更新（最新の株価を取り直す）", use_container_width=True):
     st.cache_data.clear()
+    _bulk_download.clear()   # 一括ダウンロード分も捨てる（cache_resourceはcache_data.clearでは消えない）
     st.rerun()
 
 with st.expander("📖 運用ルール（必ず確認）"):
