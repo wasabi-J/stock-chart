@@ -272,21 +272,40 @@ GROUPS = {
         "7013（IHI・航空エンジン/防衛）": "7013.T",
         "9708（帝国ホテル）": "9708.T",
         "9823（マミーマートHD・スーパー）": "9823.T",
+        # --- 2026-11-07 週次スクリーニングv2 審査通過（米国株9・日本株6）---
+        # ★塊：RMBS・4368＝半導体の塊（逆張り柱は1銘柄まで）／CCJ＝ウランでLEUとエネルギーの塊／
+        #   SFM＝消費関連（食品スーパー）／5333・5344・6999・6834・3891＝電子部品・素材
+        # ★NFLXは2025-11-17に1:10株式分割（yfinance調整済み・企業アクション辞書はℹ️）
+        "AXON（アクソン・エンタープライズ・警察向けテーザー/ボディカメラ）🆕": "AXON",
+        "BL（ブラックライン・会計SaaS）🆕": "BL",
+        "CCJ（カメコ・ウラン）🆕": "CCJ",
+        "LZ（リーガルズーム・オンライン法務）🆕": "LZ",
+        "NFLX（ネットフリックス）🆕": "NFLX",
+        "ORCL（オラクル）🆕": "ORCL",
+        "RMBS（ラムバス・半導体IP/メモリIF）🆕": "RMBS",
+        "SFM（スプラウツ・ファーマーズ・マーケット・食品スーパー）🆕": "SFM",
+        "WLDN（ウィルダン・インフラ/エネルギー系コンサル）🆕": "WLDN",
+        "3891（ニッポン高度紙工業・コンデンサ用セパレータ）🆕": "3891.T",
+        "4368（扶桑化学工業・半導体用高純度シリカ）🆕": "4368.T",
+        "5333（日本碍子・セラミックス）🆕": "5333.T",
+        "5344（MARUWA・セラミック基板）🆕": "5344.T",
+        "6834（精工技研・光通信部品/光ディスク金型）🆕": "6834.T",
+        "6999（KOA・抵抗器）🆕": "6999.T",
         # --- 2026-10-31 週次スクリーニングv2 審査通過（米国株6・日本株4）---
         # ★塊：EXK(銀)・GFI(金)＝コモディティ／GIL＝消費関連（アパレル）／7279＝自動車部品／
         #   GGAL＝アルゼンチンの銀行・TLK＝インドネシアの通信（新興国の単独銘柄）／ALB＝リチウム
         # ★7279は純利益が一時益で膨らみPERが2倍前後に歪む（株価系列の汚染ではない）
         # ★GILは2025-12-01にHanesBrandsを買収して規模が倍になった（企業アクション辞書を参照）
-        "ALB（アルベマール・リチウム）🆕": "ALB",
-        "EXK（エンデバー・シルバー・銀鉱山）🆕": "EXK",
-        "GFI（ゴールドフィールズ・金鉱山）🆕": "GFI",
-        "GGAL（ガリシア金融グループ・アルゼンチン銀行）🆕": "GGAL",
-        "GIL（ギルダン・アクティブウェア・アパレル）🆕": "GIL",
-        "TLK（テルコム・インドネシア・通信）🆕": "TLK",
-        "1514（住石ホールディングス・石炭/人工ダイヤ）🆕": "1514.T",
-        "5074（テスホールディングス・省エネ/再エネ設備）🆕": "5074.T",
-        "5715（古河機械金属・削岩機/産業機械）🆕": "5715.T",
-        "7279（ハイレックスコーポレーション・自動車用ケーブル）🆕": "7279.T",
+        "ALB（アルベマール・リチウム）": "ALB",
+        "EXK（エンデバー・シルバー・銀鉱山）": "EXK",
+        "GFI（ゴールドフィールズ・金鉱山）": "GFI",
+        "GGAL（ガリシア金融グループ・アルゼンチン銀行）": "GGAL",
+        "GIL（ギルダン・アクティブウェア・アパレル）": "GIL",
+        "TLK（テルコム・インドネシア・通信）": "TLK",
+        "1514（住石ホールディングス・石炭/人工ダイヤ）": "1514.T",
+        "5074（テスホールディングス・省エネ/再エネ設備）": "5074.T",
+        "5715（古河機械金属・削岩機/産業機械）": "5715.T",
+        "7279（ハイレックスコーポレーション・自動車用ケーブル）": "7279.T",
         "4971（メック・プリント基板用薬品）": "4971.T",
         "6235（オプトラン・光学薄膜成膜装置）": "6235.T",
         "6278（ユニオンツール・基板用ドリル）": "6278.T",
@@ -415,6 +434,7 @@ CORPORATE_ACTIONS = {
     "DCH": "🚨 **事業構成が別物になっているのだ**。2026-02-03にDowlais（英GKN系の自動車部品）を買収し、"
            "2026-02-05にティッカーをAXL→DCHへ変更したのだ。株価の系列は旧AXL時代から連続していて数字自体は正しいが、"
            "**52週高値・MA200は買収前の会社の株価を含む**のだ。GPGIと同じ型なので、点灯時は買収前後で地形が繋がっているか目視するのだ",
+    "NFLX": "ℹ️ 2025-11-17に1:10株式分割。yfinanceが調整するので**汚染なし**なのだ（分割日は52週の窓の端なのだ）",
     "GIL": "⚠️ **事業規模が倍になっているのだ**。2025-12-01にHanesBrandsの買収を完了したのだ。"
            "株価の系列は連続していて数字自体は正しいが、**52週高値・MA200は買収前後の会社をまたいでいる**のだ。"
            "DCHと同じ型なので、点灯時は買収前後で地形が繋がっているか目視するのだ",
@@ -599,7 +619,7 @@ def completed_bars_for_swing(df, tf):
 # ★cache_resourceにしたのは、cache_dataだと呼ぶたびに201銘柄分を丸ごとコピーして逆に重くなるため。
 #   引数のepochは朝6:15／夕方15:45の区切り（_data_epoch）で、区切りをまたぐと自動で取り直す。
 # ★一括取得に失敗した銘柄は、load_data側で従来どおり1銘柄ずつ取りに行く（保険）。
-@st.cache_resource(max_entries=2)
+@st.cache_resource(max_entries=3)
 def _bulk_download(tickers, period, epoch):
     out = {}
     try:
@@ -630,8 +650,14 @@ def load_data(ticker, period="5y"):
             df = _b[ticker].copy()
     if df is None or df.empty:
         df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+    return _prepare_indicators(df)
+
+def _prepare_indicators(df):
+    """生のOHLCVから指標列を作る（2026-11-07にload_dataから切り出した・計算内容は無改変）。
+    ★◎初点灯の履歴（G）で、全期間の一括ダウンロードにも同じ計算を通すために分けた。"""
     if df is None or df.empty:
         return None
+    df = df.copy()
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     # OHLC（4本値）を保持してローソク足描画に使う。指標は終値ベース
@@ -856,12 +882,18 @@ def scan_all():
 
 # === フル点灯（大底10/10・天井9/9）の履歴を全銘柄ぶん集計（直近1年）===
 @st.cache_data(ttl=21600)
-def scan_full_history(days_back=365):
-    """全登録銘柄について、直近days_back日のフル点灯（大底10/10・天井9/9）を集める。
-    連続点灯はクラスタ化して1イベント1行にまとめる。各クラスタは点灯した最初の日を代表とする。"""
+def scan_full_history(days_back=365, scope="all"):
+    """登録銘柄について、直近days_back日のフル点灯（大底10/10・天井9/9）を集める。
+    連続点灯はクラスタ化して1イベント1行にまとめる。各クラスタは点灯した最初の日を代表とする。
+    ★2026-11-07：scopeを追加。"held"＝保有銘柄だけ（8銘柄なのですぐ終わる）／"others"＝保有以外。
+      判定の中身は変えていない。"""
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=days_back)
     events = []  # (date, label, ticker, kind, is_held)
     for label, tk in ALL_TICKERS:
+        if scope == "held" and tk not in HELD_TICKERS:
+            continue
+        if scope == "others" and tk in HELD_TICKERS:
+            continue
         try:
             d = load_data(tk, "5y")  # ★scan_all(5y)のキャッシュを再利用＝再ダウンロードしない
             if d is None:
@@ -1119,7 +1151,7 @@ def get_vix_level():
 # 🔥確定演出の判定（大底8＋VIX30＋高ボラ）はバケット振り分けの中で直接行っている。
 
 # === 点灯銘柄の一括出力（複数選択→Markdownテーブル）===
-# 母集団212銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
+# 母集団227銘柄では一斉点灯が起こりうるため、選んだ銘柄をまとめて表に出して相談を1往復で終わらせる。
 # 短縮版＝PER点灯記録ログの列と完全一致（そのまま貼れる）、全項目版＝判断に使う指標を全部出す。
 def _cluster_signals(d, kind="bottom", thr=9, gap=10):
     """点灯日をクラスタ化して「1山＝1イベント」に畳む共通処理。
@@ -1151,6 +1183,65 @@ def _cluster_signals(d, kind="bottom", thr=9, gap=10):
         best = min(c, key=lambda x: x[2]) if kind == "bottom" else max(c, key=lambda x: x[2])
         out.append((best[1], best[2], max(x[3] for x in c)))
     out.sort(key=lambda x: x[0])
+    return out
+
+def _bottom_score_series(d):
+    """calc_bottom_scoreと同じ10条件を、全日付まとめて列で計算する（2026-11-07追加・G専用）。
+    ★条件・閾値はcalc_bottom_scoreと完全に同じ。NaNの扱いも同じ（NaNの比較は不成立）。
+    ★売買判定（バケット・ポップアップ・検証4の回数）には使っていない。使うのは◎初点灯の履歴だけ。"""
+    c = d["close"]
+    sc = ((d["rsi"] <= 30).astype(int)
+          + (c <= d["bb_lower"] * 1.05).astype(int)
+          + (c < d["sma25"]).astype(int)
+          + (c < d["sma200"]).astype(int)
+          + (d["macd_hist"] < 0).astype(int)
+          + (d["drawdown_pct"] <= -30).astype(int)
+          + (d["days_from_high"] >= 60).astype(int)
+          + (d["w_rsi"] <= 30).astype(int)
+          + (d["rally_pct"] <= 5).astype(int)
+          + (d["ma200_dev"] <= -20).astype(int))
+    return sc
+
+def _first_bottom9_cluster(d, thr=9, gap=10):
+    """全期間で最初の大底9以上の山を返す（_cluster_signalsの1つ目と同じ結果）。
+    戻り値: (代表日, 代表価格, 山の中の最高スコア) / None"""
+    sc = _bottom_score_series(d).values
+    idx = [i for i in range(260, len(d)) if sc[i] >= thr]
+    if not idx:
+        return None
+    cl = [idx[0]]
+    for i in idx[1:]:
+        if i - cl[-1] <= gap:
+            cl.append(i)
+        else:
+            break
+    closes = d["close"].values
+    best = min(cl, key=lambda i: closes[i])
+    return d.index[best], float(closes[best]), int(max(sc[i] for i in cl))
+
+@st.cache_data(ttl=21600)
+def scan_first_lights():
+    """◎初点灯の履歴（G）。登録銘柄の初点灯日を新しい順に返す。"""
+    tks = tuple(tk for _, tk in ALL_TICKERS if tk not in NON_TRADABLE and tk not in EXCLUDED_TICKERS)
+    raw = _bulk_download(tks, "max", _data_epoch(datetime.now(JST)))
+    label_of = {tk: lb for lb, tk in ALL_TICKERS}
+    out = []
+    for tk in tks:
+        try:
+            src = raw.get(tk)
+            d = _prepare_indicators(src) if src is not None else load_data(tk, "max")
+            if d is None:
+                continue
+            f = _first_bottom9_cluster(d)
+            if f is None:
+                continue
+            dt, px, mx = f
+            out.append({"date": dt, "tk": tk, "short": label_of[tk].split("（")[0].strip(),
+                        "score": mx, "start": d.index[0], "held": tk in HELD_TICKERS,
+                        "near_start": (dt - d.index[0]).days < 500})
+        except Exception:
+            continue
+    out.sort(key=lambda r: r["date"], reverse=True)
     return out
 
 def _count_bottom9_clusters(d):
@@ -1264,7 +1355,7 @@ with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
 **シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3。損切りSL-15%固定、利確は値幅段階+100/300/500%(守り銘柄のみTP+50%)、保有は年単位(長いほどEVが高い)。★180日撤退は旧ルールで廃止済み。
 **出口の序列**: 暗号資産系=恩株化(+46%) / 指数優良株=値幅段階利確 / モメンタム柱=日足MA200割れ終値のみ(天井シグナルも利確ラインもなし) / KRUS等チャネル系=地形の上辺で売る。
-**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系は**柱ごとに1銘柄まで**（2026-09-26統一）。★モメンタム柱＝**空き**（6963ロームは2026-10に売却）。★逆張り柱＝**空き**。SOXL／NVDA／AMD／6920レーザーテック／6963ローム／6961エンプラス／6787メイコー／6526ソシオネクスト／4970東洋合成／6254野村マイクロ／6315TOWA／6521オキサイドの中から**どれか1つだけ**買えるのだ。★【防衛が三つ巴】KTOS／LDOS／AVAV＝同じく1つだけ。★**「1銘柄まで」の上限があるのはこの3つ（暗号資産・半導体・防衛）だけ**なのだ。下の「同じ塊」は上限ではなく注意なのだ。
+**集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系は**柱ごとに1銘柄まで**（2026-09-26統一）。★モメンタム柱＝**空き**（6963ロームは2026-10に売却）。★逆張り柱＝**空き**。SOXL／NVDA／AMD／6920レーザーテック／6963ローム／6961エンプラス／6787メイコー／6526ソシオネクスト／4970東洋合成／6254野村マイクロ／6315TOWA／6521オキサイド／RMBSラムバス／4368扶桑化学の中から**どれか1つだけ**買えるのだ。★【防衛が三つ巴】KTOS／LDOS／AVAV＝同じく1つだけ。★**「1銘柄まで」の上限があるのはこの3つ（暗号資産・半導体・防衛）だけ**なのだ。下の「同じ塊」は上限ではなく注意なのだ。
 **低ボラ側(資金を厚くしない)**: GLD/JNJ/PG/1345(Jリート指数ETF)は💎検証で「VIX30でも成績が改善しない」側。登録は自由だが厚く張る対象ではない。
 **優待銘柄(別財布)**: 8136サンリオ／3549クスリのアオキ／4661オリエンタルランド／7615京都きもの友禅HD。買う目的が優待なら逆張りシステムの土俵外＝大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない。
 **未検証(⚠️)**: SOFIは売買対象外・参考表示のみ。上場4年未満も対象外。
@@ -1274,10 +1365,10 @@ with st.expander("📖 運用ルール（必ず確認）"):
 **MP（レアアース）**: 通常より厳しい買い条件＝大底9＋できればVIX25以上。地形は整いつつあり押しを待つ段階。★月足upの要求は撤回済み（v2検証でrange≧upと判明したため）。
 **優待バケット(8136サンリオ/3549クスリのアオキ)**: 逆張りシステムの土俵外・別財布。大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない（売らずに握るので出口が存在しない）。8136のトリガーは800円台・指値は置かず監視のみ。
 **モメンタム柱**: 出口はMA200割れで即売りのみ。利確ラインなし。最上段の🛡️保有銘柄のシグナル一覧でMA200乖離を毎回確認する（+5%以下で🟡・割れで🔴）。
-**🆕銘柄**: 2026-10-31の週次スクリーニング通過組（10件）。★7279は純利益が一時益で膨らみPERが2倍前後に歪むのだ（指標汚染ではない）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDR（8/29組）はIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
-**同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/GIL/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP/LULU/AEO/BROS/CHWY/THO/8267　②建材・住宅・建設=BLDR/SITE/LII/PNR/AAON/IBP/POOL/RH/ROAD/WHR/WSC/ACM/AMTM/TGLS/1801/1835/1885/1893/6366　③コモディティ=GLD/SLV/COPX/GDX/NEM/EXK(銀鉱山)/GFI(金鉱山)（＋1328保有）　④中国ADR=BABA/TME/BILI/BIDU/QFIN/TCOM/PDD/CYD(NYSE上場・事業は中国)（LEGNも中国系バイオで規制リスクを共有・TCOMはTRIPとも旅行で重なる）　⑤プリント基板=4971メック(薬品)/6278ユニオンツール(ドリル)/5706三井金属(極薄銅箔)/6787メイコー(基板本体)＝川上から川下まで同じ需要で動く　⑥住宅ローン・不動産=RKT/PFSI/WD/CIGI/CSGP/Z　⑦インド=HDB/INFY/WIT　⑧エネルギー=XLE/CRK(天然ガス)/NRG(電力)/LEU(ウラン濃縮)　⑨自動車=APTV/DCH/7220武蔵精密/7279ハイレックス/GPI(ディーラー)　⑩光通信=IPGP/FN　⑪医療機器=BSX/PODD　⑫通信設備投資=CALX(機器)/DY(工事)　⑬太陽光=FSLR/ENPH　⑭医療保険=ALHC/HUM　⑮セキュリティ=CRWD/OKTA　⑯決済=FIS/FISV　⑰電力・送電網=AMSC/HE/MTZ/DY(工事)　⑱カジノ=LVS/MGM/WYNN　⑲防衛・航空=BWXT(米海軍の原子炉)/7013IHI。★空調はLIIとAAONが直接の競合なのだ。**これらは上限ではなく注意**＝VIX30では塊ごと同時点灯するので、複数買うと分散したつもりで分散になっていないのだ（2026-09-26に記述を是正）。
+**🆕銘柄**: 2026-11-07の週次スクリーニング通過組（15件）。★7279（10/31組）は純利益が一時益で膨らみPERが2倍前後に歪むのだ（指標汚染ではない）。プール入場審査は通過済みだが実弾は点灯待ち。★BLDR（8/29組）はIRS和解の一時費用で会計上は赤字だが営業利益は黒字＝「一時費用による赤字」と「本業の赤字」は別物として通した実例。
+**同じ塊に注意（分散したつもりで分散できていない）**: ①消費関連=FLO/GAP/GIL/SFM/WING/GME/NKE/ONON/ZTS/POST/PPC/TRIP/LULU/AEO/BROS/CHWY/THO/8267　②建材・住宅・建設=BLDR/SITE/LII/PNR/AAON/IBP/POOL/RH/ROAD/WHR/WSC/ACM/AMTM/TGLS/1801/1835/1885/1893/6366　③コモディティ=GLD/SLV/COPX/GDX/NEM/EXK(銀鉱山)/GFI(金鉱山)（＋1328保有）　④中国ADR=BABA/TME/BILI/BIDU/QFIN/TCOM/PDD/CYD(NYSE上場・事業は中国)（LEGNも中国系バイオで規制リスクを共有・TCOMはTRIPとも旅行で重なる）　⑤プリント基板=4971メック(薬品)/6278ユニオンツール(ドリル)/5706三井金属(極薄銅箔)/6787メイコー(基板本体)＝川上から川下まで同じ需要で動く　⑥住宅ローン・不動産=RKT/PFSI/WD/CIGI/CSGP/Z　⑦インド=HDB/INFY/WIT　⑧エネルギー=XLE/CRK(天然ガス)/NRG(電力)/LEU(ウラン濃縮)/CCJ(ウラン)　⑨自動車=APTV/DCH/7220武蔵精密/7279ハイレックス/GPI(ディーラー)　⑩光通信=IPGP/FN　⑪医療機器=BSX/PODD　⑫通信設備投資=CALX(機器)/DY(工事)　⑬太陽光=FSLR/ENPH　⑭医療保険=ALHC/HUM　⑮セキュリティ=CRWD/OKTA　⑯決済=FIS/FISV　⑰電力・送電網=AMSC/HE/MTZ/DY(工事)　⑱カジノ=LVS/MGM/WYNN　⑲防衛・航空=BWXT(米海軍の原子炉)/7013IHI。★空調はLIIとAAONが直接の競合なのだ。**これらは上限ではなく注意**＝VIX30では塊ごと同時点灯するので、複数買うと分散したつもりで分散になっていないのだ（2026-09-26に記述を是正）。
 **★★2695くら寿司とKRUSは親子会社**: KRUSは2695の子会社。両方持つのは分散ではなく同じ会社への二重露出なのだ。★KRUSは2026-09に逆指値発動で売却済みなので、現在この衝突は解消しているのだ（📁短期戦略はこれに伴い廃止）。
-**企業アクション汚染**: APTV/GPGI/DCH/GIL/1328/5706/7649/CRWD/MSTU/4107/2695/7013/5741/ESAB/FISV/BRSLは企業アクションの影響を受けているのだ。該当銘柄を開くと画面に警告が出るのだ。★特にAPTVはスピンオフをyfinanceが調整しないため**深度が丸ごと嘘**で、真の深度は-30%前後なのだ（2027-04まで）。
+**企業アクション汚染**: APTV/GPGI/DCH/GIL/1328/5706/7649/CRWD/MSTU/4107/2695/7013/5741/NFLX/ESAB/FISV/BRSLは企業アクションの影響を受けているのだ。該当銘柄を開くと画面に警告が出るのだ。★特にAPTVはスピンオフをyfinanceが調整しないため**深度が丸ごと嘘**で、真の深度は-30%前後なのだ（2027-04まで）。
 **週次スクリーナー条件(2026-08-22改定)**: RSI(14)31〜45 / 52週高値から【-45%以上】/ MA200乖離-15%以下 / 米国=時価総額$1B・売買代金$7M / 日本=時価総額300億円・売買代金1億円。深度を-30%→-45%に締めたのは-50〜-30%が3年到達率17.3%の最弱帯だったため。
 **銘柄の保有/監視の移動**: 売買したらClaudeに相談ついでに伝えてコードを直してもらう運用。
 """)
@@ -1354,6 +1445,24 @@ for _lb, _tk in GROUPS["📁 保有中"].items():
     _kind = "モメンタム" if _tk in MOMENTUM_HELD else "逆張り"
     _held_rows.append((_short, _kind, _bs_s, _ts_s, _dev_s, _stat))
 
+# === ◎初点灯の検出（2026-11-07追加・F）===
+# 大底9以上の銘柄だけ、検証4の全期間回数（count_bottom9_full）を数える。1回目＝今回が全期間で初めて＝◎初点灯。
+# ★ティアSの根拠なので見逃さないのが最優先。全期間データが取れなかった銘柄も「判定できない」として必ず出す。
+_first_alerts = []
+_first_set = set()
+for _lb, _tk, _bs, _ts in scan:
+    if _bs < 9 or _tk in NON_TRADABLE or _tk in EXCLUDED_TICKERS:
+        continue
+    _short = _lb.split("（")[0].strip()
+    _f9 = count_bottom9_full(_tk)
+    if _f9 is None:
+        _first_alerts.append(f"⚠️ **{_short}**（大底{_bs}）：全期間データが取れず検証4を判定できないのだ。"
+                             "🔄データ更新のあと個別画面のサマリーで確認するのだ")
+    elif _f9["n"] <= 1:
+        _first_set.add(_tk)
+        _first_alerts.append(f"◎ **{_short}**（大底{_bs}）：**全期間で初の大底9＝◎初点灯**なのだ"
+                             f"（データ開始 {_f9['start'].strftime('%Y-%m')}）。ティアS候補として株式部屋で確認するのだ")
+
 _ht = ["<div style='font-size:0.78em;font-weight:700;margin:2px 0;'>🛡️ 保有銘柄のシグナル</div>",
        "<table style='font-size:0.74em;width:100%;border-collapse:collapse;margin-bottom:6px;'>",
        "<tr style='opacity:0.7;'><th style='text-align:left;'>銘柄</th><th>柱</th><th>大底</th>"
@@ -1371,22 +1480,30 @@ st.caption("逆張り＝大底8・天井7で🟡／大底9以上・天井8以上
 # ★iPhoneのSafariはWebページからのバイブ・自動の音を許さないので、閉じるまで消えないモーダルで知らせる。
 # ★同じセッション中は1回だけ出す（ボタン操作のたびの再表示を防ぐ）。
 #   対象＝逆張り保有の天井8以上・大底9以上（買い増し用）／モメンタム保有のMA200割れ。
-def _held_alert_body(items):
-    for _m in items:
-        st.markdown(_m)
+def _held_alert_body(first_items, held_items):
+    # ★Streamlitは1回の表示でモーダルを1つしか開けないので、◎初点灯と保有シグナルを1つにまとめる
+    if first_items:
+        st.markdown("##### ◎ 初点灯")
+        for _m in first_items:
+            st.markdown(_m)
+    if held_items:
+        st.markdown("##### 🛡️ 保有銘柄")
+        for _m in held_items:
+            st.markdown(_m)
     st.caption("相談はClaudeへ。右上の×で閉じると、この起動中はもう出ないのだ")
 
 _dialog_deco = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
-if _held_alerts and not st.session_state.get("held_alert_shown"):
+if (_held_alerts or _first_alerts) and not st.session_state.get("held_alert_shown"):
     st.session_state["held_alert_shown"] = True
+    _ttl = "🚨 ◎初点灯・保有銘柄のシグナルなのだ" if _first_alerts else "🚨 保有銘柄にシグナルが出ているのだ"
     if _dialog_deco is not None:
-        _dialog_deco("🚨 保有銘柄にシグナルが出ているのだ")(_held_alert_body)(_held_alerts)
+        _dialog_deco(_ttl)(_held_alert_body)(_first_alerts, _held_alerts)
     else:
         # 古いStreamlitでモーダルが使えない時の保険
-        st.error("🚨 **保有銘柄にシグナルが出ているのだ**\n\n" + "\n\n".join(_held_alerts))
+        st.error(f"**{_ttl}**\n\n" + "\n\n".join(_first_alerts + _held_alerts))
 
 # === 最上段：大底スコア別バケット表示（2026-08-18に全面統合）===
-# 背景：母集団212銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
+# 背景：母集団227銘柄では凪でも点灯が画面を埋め、VIX30の暴落時は数十件になって破綻する。
 # よって点灯を「一覧」でなく「スコア別の束」にした。点灯銘柄は該当バケットに自動で積まれるので
 # 枠を作る作業は不要（VIX30で30件来たら大底9の枠が伸びるだけ）。
 # 旧「ここぞアラート枠」と「通常点灯枠」で同じ銘柄を2箇所に出していた二重表示はこれで解消。
@@ -1457,6 +1574,8 @@ def _render_row(r):
     if r["tk"] in CORPORATE_ACTIONS:
         # 🚨（深度が実際に歪んでいる）だけ一覧に出す。ℹ️と⚠️は個別画面で見れば足りる
         tags += " `🚨企業アクション`" if CORPORATE_ACTIONS[r["tk"]].startswith("🚨") else " `⚠️企業アクション`"
+    if r["tk"] in _first_set:
+        tags += " `◎初点灯`"
     if r["conds"]:
         tags += f" `⭐{'/'.join(r['conds'])}`"
     return f"- **{r['short']}**　週足 {ws}　月足 {tr}　ボラ {av}{tags}"
@@ -1695,43 +1814,64 @@ with st.expander("🚀 モメンタムシグナル一覧（タップで開く｜
     else:
         st.caption("モメンタム売りの点灯はなしなのだ。")
 
-# === フル点灯の履歴（折りたたみ・直近1年・保有銘柄を強調）===
-with st.expander("🏆 フル点灯の履歴（直近1年・大底10/10・天井9/9のみ）"):
-    st.caption("多忙・体調不良で見逃した時の回収用。保有銘柄を最上部に強調表示。")
-    # ★2026-10-25：expanderは閉じていても中身が実行されるため、起動のたびに201銘柄×1年分を
-    #   計算していた（起動が重い原因の1つ）。ボタンを押した時だけ集計するように変えた。表示のみで判定は不変。
-    if not st.session_state.get("show_full_hist"):
-        st.button("🏆 履歴を集計する（初回は数十秒かかるのだ）", key="btn_full_hist",
-                  on_click=lambda: st.session_state.update(show_full_hist=True))
-        full_events = None
-    else:
-        with st.spinner("履歴を集計中..."):
-            full_events = scan_full_history(365)
-    if full_events is None:
-        pass
-    elif not full_events:
-        st.info("直近1年でフル点灯（満点）はなかったのだ。")
-    else:
-        held_events = [e for e in full_events if e[4]]
-        other_events = [e for e in full_events if not e[4]]
-        # 枠1：保有銘柄（直近1年すべて）
+# === フル点灯の履歴（2026-11-07に保有／監視・その他の2ボタンに分割）===
+# ★expanderは閉じていても中身が実行されるため、どちらもボタンを押した時だけ集計する。表示のみで判定は不変。
+with st.expander("🏆 フル点灯の履歴（大底10/10・天井9/9のみ）"):
+    st.caption("多忙・体調不良で見逃した時の回収用なのだ。保有銘柄の方は8銘柄だけなのですぐ出るのだ。")
+    _hc1, _hc2 = st.columns(2)
+    with _hc1:
+        st.button("⭐ 保有銘柄（直近1年）", key="btn_hist_held", use_container_width=True,
+                  on_click=lambda: st.session_state.update(hist_view="held"))
+    with _hc2:
+        st.button("監視・その他（直近10件）", key="btn_hist_others", use_container_width=True,
+                  on_click=lambda: st.session_state.update(hist_view="others"),
+                  help="全銘柄を計算するので数十秒かかるのだ")
+    _hv = st.session_state.get("hist_view")
+    if _hv == "held":
+        with st.spinner("保有銘柄の履歴を集計中..."):
+            _ev = scan_full_history(365, "held")
         st.markdown("#### ⭐ 保有銘柄のフル点灯（直近1年）")
-        if held_events:
-            for dt, label, tk, kind, _ in held_events:
+        if _ev:
+            for dt, label, tk, kind, _ in _ev:
                 mark = "💎" if "大底" in kind else "⛔"
                 st.markdown(f"- **{dt.strftime('%Y-%m-%d')}**　{mark} **{label}**　{kind}")
         else:
             st.caption("保有銘柄のフル点灯はなかったのだ。")
-        # 枠2：それ以外の銘柄（直近10件だけ）
+    elif _hv == "others":
+        with st.spinner("監視・その他の履歴を集計中（数十秒かかるのだ）..."):
+            _ev = scan_full_history(365, "others")
         st.markdown("#### 監視・その他銘柄のフル点灯（直近10件）")
-        if other_events:
-            for dt, label, tk, kind, _ in other_events[:10]:
+        if _ev:
+            for dt, label, tk, kind, _ in _ev[:10]:
                 mark = "💎" if "大底" in kind else "⛔"
                 st.markdown(f"- {dt.strftime('%Y-%m-%d')}　{mark} {label}　{kind}")
-            if len(other_events) > 10:
-                st.caption(f"（ほか{len(other_events)-10}件は省略。直近10件のみ表示）")
+            if len(_ev) > 10:
+                st.caption(f"（ほか{len(_ev)-10}件は省略。直近10件のみ表示）")
         else:
-            st.caption("該当なしなのだ。")
+            st.caption("直近1年で該当なしなのだ。")
+
+# === ◎初点灯の履歴（2026-11-07追加・G）===
+# 登録銘柄ごとに「全期間で初めて大底9以上が点いた日」を拾い、新しい順に10件出す。表示のみで判定は不変。
+# ★全期間データを一括ダウンロードし、スコアは_bottom_score_series（calc_bottom_scoreと同じ10条件を
+#   列でまとめて計算する版）で出す。1日ずつcalc_bottom_scoreを回すと227銘柄×数千日で数分かかるため。
+#   両者が全日付で一致することは実装時に検算済み。点灯の数え方は_cluster_signalsと同じ（先頭260本は助走・10営業日以内は1回）。
+with st.expander("◎ 初点灯の履歴（全期間で初めて大底9以上が点いた銘柄・直近10件）"):
+    st.caption("ティアSの根拠になる◎初点灯の見逃し回収用なのだ。全銘柄の全期間データを使うので、初回は1〜2分かかるのだ。")
+    st.button("◎ 初点灯の履歴を集計する", key="btn_first_hist", use_container_width=True,
+              on_click=lambda: st.session_state.update(show_first_hist=True))
+    if st.session_state.get("show_first_hist"):
+        with st.spinner("全期間データで初点灯を集計中..."):
+            _fl = scan_first_lights()
+        if not _fl:
+            st.caption("該当なし、またはデータ取得に失敗したのだ。🔄データ更新のあとにもう一度試してほしいのだ。")
+        else:
+            for _r in _fl[:10]:
+                _tag = " `保有`" if _r["held"] else ""
+                _near = "　⚠️データ開始から間もない（上場直後かYahooの履歴の始まり。本当の初点灯かは要確認）" if _r["near_start"] else ""
+                st.markdown(f"- **{_r['date'].strftime('%Y-%m-%d')}**　◎ **{_r['short']}**　大底{_r['score']}"
+                            f"　（データ開始 {_r['start'].strftime('%Y-%m')}）{_tag}{_near}")
+            st.caption("日付は初点灯の山のうち最も安かった日なのだ（チャートの点灯マーカーと同じ代表日）。"
+                       "🔬対象外と指数は除いているのだ")
 
 # === 📋 登録銘柄リストの書き出し（2026-09-12追加・週次ルーチン用）===
 # 背景＝株式部屋のメモリーが持つ登録リストは更新を忘れると古くなる（9/5時点で止まり、9/9に手動追加した
