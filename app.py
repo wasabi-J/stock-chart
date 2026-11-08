@@ -457,6 +457,24 @@ CORPORATE_ACTIONS = {
 # 保有銘柄のティッカー集合（フル点灯の強調判定に使う）
 HELD_TICKERS = set(GROUPS["📁 保有中"].values())
 
+# === 天井シグナルC3の適用範囲（2026-11-07 株式部屋で確定・2026-11-09実装）===
+# C3＝天井スコア8以上 かつ 月足弱気ダイバ（monthly_bear_div）。
+# ★売りの合図に使うのは「逆張り柱の米国個別株」だけ（GRAB・TMEなど米国上場の外国株も含む）。
+# ★日本株は検証中のため表示のみ。暗号資産系（COIN・MSTR・MSTU）は対象外。ETF・指数も対象外。
+C3_EXCLUDE_CRYPTO = {"COIN", "MSTR", "MSTU"}
+US_ETF_TICKERS = {"GLD", "SLV", "COPX", "GDX", "EWZ", "XLE", "TMF", "SOXL", "TSLL", "MSTU"}
+JP_ETF_TICKERS = {"1328.T", "1345.T", "1673.T", "1458.T", "2869.T"}   # ETFはC3の対象外（出口は今の表示のまま）
+
+def c3_role(tk):
+    """C3の扱い。"sell"＝売りの合図に使う／"display"＝表示のみ（日本株）／None＝対象外"""
+    if tk in C3_EXCLUDE_CRYPTO or tk in US_ETF_TICKERS or tk in JP_ETF_TICKERS or tk in NON_TRADABLE:
+        return None
+    if tk.startswith("^") or "=" in tk or tk.endswith("-USD"):
+        return None
+    if tk.endswith(".T"):
+        return "display"
+    return "sell"
+
 # === モメンタム柱で保有中の銘柄（出口ステータスの常時表示用）===
 # 出口は「日足MA200割れで即売り」これのみ。利確ラインなし。
 # MA200は日々動くので損切りラインは固定せず毎回この表示で更新して確認する。
@@ -1109,6 +1127,39 @@ def _detect_divergence(s):
             return True
     return False
 
+# === 月足弱気ダイバ（2026-11-09追加・命中率室のバックテストのコードをそのまま取り込んだ）===
+# ★定義：直近60本の月足の局所高値（前後3本）のうち、隣り合う組のどれか1つで
+#   「株価は高値更新・RSI(14,Wilder)は切り下げ・直近側の高値のRSI>55」が成立すれば「あり」。
+# ★進行中の月は使わない。局所高値は後ろ3本で確定するので、高値から最短3ヶ月後に出る。
+# ★強気側の_detect_divergenceとは数え方が違う（強気は進行中の月を含む）。揃えないと株式部屋で決定済み。
+def monthly_bear_div(close, thr=55, w=3):
+    m = close.resample("ME").last().dropna()
+    if len(m) and m.index[-1] > close.index[-1]:
+        m = m.iloc[:-1]                        # 進行中の月は使わない
+    r = wilder_rsi(m).values; v = m.values; n = len(v)
+    if n < 30:
+        return False
+    highs = [i for i in range(max(w, n-60), n-w) if v[i] == v[i-w:i+w+1].max()]
+    for k in range(1, len(highs)):
+        ip, ic = highs[k-1], highs[k]          # 隣り合う局所高値の組
+        if np.isnan(r[ip]) or np.isnan(r[ic]):
+            continue
+        if v[ic] > v[ip] and r[ic] < r[ip] and r[ic] > thr:
+            return True                        # どれか1組で成立すれば「あり」
+    return False
+
+@st.cache_data(ttl=21600)
+def bear_div_status(ticker):
+    """月足弱気ダイバの判定（全期間データで計算）。戻り値: True/False/None（取得失敗）
+    ★全期間を使うのは、5年データだと60ヶ月の窓の頭でRSIの助走が足りず値がぶれるため。"""
+    try:
+        d = load_data(ticker, "max")
+        if d is None:
+            return None
+        return bool(monthly_bear_div(d["close"]))
+    except Exception:
+        return None
+
 def divergence_signals(df):
     """月足・日足の強気ダイバージェンスを判定。★2026-09-18：引数をticker→dfに変えた
     （momentum_signalと同じく"max"の二重ダウンロードを廃止するため）。
@@ -1353,8 +1404,8 @@ if st.button("🔄 データ更新（最新の株価を取り直す）", use_con
 
 with st.expander("📖 運用ルール（必ず確認）"):
     st.markdown("""
-**シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3。損切りSL-15%固定、利確は値幅段階+100/300/500%(守り銘柄のみTP+50%)、保有は年単位(長いほどEVが高い)。★180日撤退は旧ルールで廃止済み。
-**出口の序列**: 暗号資産系=恩株化(+46%) / 指数優良株=値幅段階利確 / モメンタム柱=日足MA200割れ終値のみ(天井シグナルも利確ラインもなし) / KRUS等チャネル系=地形の上辺で売る。
+**シグナル点灯時**: まず売買せずClaudeに相談。買いは3分割(0/+15/+30営業日)各1/3。損切りSL-15%固定、利確は値幅段階+100/300/500%(守り銘柄のみTP+50%)、保有は年単位(長いほどEVが高い)。★**逆張り柱の米国個別株は2026-11-07から出口＝C3（天井8以上＋月足弱気ダイバ）・最長保有の期限なし**（SL-15%は従来どおり）。日本株は値幅段階のまま。★180日撤退は旧ルールで廃止済み。
+**出口の序列**: 逆張り柱の米国個別株=C3（天井8以上＋月足弱気ダイバ）/ 暗号資産系=恩株化(+46%) / 指数優良株・日本株=値幅段階利確 / モメンタム柱=日足MA200割れ終値のみ(天井シグナルも利確ラインもなし) / KRUS等チャネル系=地形の上辺で売る。
 **集中リスク**: 暗号資産系(COIN/MSTR/MARA/CLSK)は1銘柄まで。半導体系は**柱ごとに1銘柄まで**（2026-09-26統一）。★モメンタム柱＝**空き**（6963ロームは2026-10に売却）。★逆張り柱＝**空き**。SOXL／NVDA／AMD／6920レーザーテック／6963ローム／6961エンプラス／6787メイコー／6526ソシオネクスト／4970東洋合成／6254野村マイクロ／6315TOWA／6521オキサイド／RMBSラムバス／4368扶桑化学の中から**どれか1つだけ**買えるのだ。★【防衛が三つ巴】KTOS／LDOS／AVAV＝同じく1つだけ。★**「1銘柄まで」の上限があるのはこの3つ（暗号資産・半導体・防衛）だけ**なのだ。下の「同じ塊」は上限ではなく注意なのだ。
 **低ボラ側(資金を厚くしない)**: GLD/JNJ/PG/1345(Jリート指数ETF)は💎検証で「VIX30でも成績が改善しない」側。登録は自由だが厚く張る対象ではない。
 **優待銘柄(別財布)**: 8136サンリオ／3549クスリのアオキ／4661オリエンタルランド／7615京都きもの友禅HD。買う目的が優待なら逆張りシステムの土俵外＝大底スコア/月足トレンド/損切り-15%/利確ラインは適用しない。
@@ -1436,9 +1487,21 @@ for _lb, _tk in GROUPS["📁 保有中"].items():
             _held_alerts.append(f"🟢 **{_short}**：大底{_bs}点灯 → 買い増しの判断材料なのだ")
         elif _bs == 8:
             _marks.append("🟡大底8")
+        # ★2026-11-09：天井の🔴とポップアップはC3（天井8以上＋月足弱気ダイバ）に置き換えた。
+        #   天井8単独は表示のみ（🟡）。C3が売りの合図になるのは逆張り柱の米国個別株だけ。
+        _role = c3_role(_tk)
         if _ts >= 8:
-            _marks.append(f"🔴天井{_ts}")
-            _held_alerts.append(f"🔴 **{_short}**：天井{_ts}点灯 → 利確・リスク管理を検討するのだ")
+            _bd = bear_div_status(_tk) if _role is not None else None
+            if _role == "sell" and _bd:
+                _marks.append(f"🔴C3（天井{_ts}＋月足弱気ダイバ）")
+                _held_alerts.append(f"🔴 **{_short}**：**C3成立**（天井{_ts}＋月足弱気ダイバ）→ 売りの合図なのだ")
+            elif _role == "display" and _bd:
+                _marks.append(f"🟡C3（天井{_ts}＋弱気ダイバ・日本株は表示のみ）")
+            elif _role is None:
+                _marks.append(f"天井{_ts}（対象外）")
+            else:
+                _bd_s = "⚠️ダイバ取得失敗" if _bd is None else "弱気ダイバなし"
+                _marks.append(f"🟡天井{_ts}（表示のみ・{_bd_s}）")
         elif _ts == 7:
             _marks.append("🟡天井7")
         _stat = "　".join(_marks) if _marks else "✅"
@@ -1473,7 +1536,7 @@ for _s, _k, _b, _t, _d, _st in _held_rows:
                f"<td style='text-align:center;'>{_d or '-'}</td><td>{_st}</td></tr>")
 _ht.append("</table>")
 st.markdown("".join(_ht), unsafe_allow_html=True)
-st.caption("逆張り＝大底8・天井7で🟡／大底9以上・天井8以上で🔴。"
+st.caption("逆張り＝大底8・天井7・天井8単独で🟡／大底9以上と、米国個別株のC3（天井8以上＋月足弱気ダイバ）で🔴。"
            "モメンタム＝MA200乖離+5%以下で🟡／MA200割れで🔴（大底・天井では色を付けないのだ）")
 
 # === 🚨 起動時ポップアップ（2026-10-24追加・プッシュ通知の代わり）===
@@ -1985,7 +2048,20 @@ if _to is not None:
         st.caption(f"💧 20日平均売買代金 {_tsym}{_to_disp}/日｜薄商い（テクニカルがダマシになりやすい・7325型）")
 
 _p = float(latest["close"])
-st.caption(f"🎯 今買うなら｜損切り-15%＝{symbol}{_p*0.85:,.2f}｜+50%＝{symbol}{_p*1.5:,.2f}｜+100%＝{symbol}{_p*2:,.2f}｜+300%＝{symbol}{_p*4:,.2f}｜+500%＝{symbol}{_p*6:,.2f}（※3分割後は平均取得単価が基準）")
+# === C3（天井8以上＋月足弱気ダイバ）の判定（2026-11-09）===
+_c3_role = c3_role(ticker)
+_bear = bear_div_status(ticker) if _c3_role is not None else None
+_c3 = bool(top_score >= 8 and _bear)
+# ★Q5（2026-11-09）：逆張り柱の米国個別株の出口はC3・最長保有の期限なし。利確ラインは参考として小さく残す
+if _c3_role == "sell":
+    st.caption(f"🎯 今買うなら｜損切り-15%＝{symbol}{_p*0.85:,.2f}｜**出口＝C3（天井8以上＋月足弱気ダイバ）・最長保有の期限なし**")
+    st.caption(f"　参考（旧・値幅段階）：+100%＝{symbol}{_p*2:,.2f}｜+300%＝{symbol}{_p*4:,.2f}｜+500%＝{symbol}{_p*6:,.2f}（※3分割後は平均取得単価が基準）")
+    _exit_lines = ("- 出口: **C3（天井8以上＋月足弱気ダイバ）**。米国個別株は2026-11-07から値幅段階の利確をやめたのだ\n"
+                   "- 保有: **最長の期限なし**（C3かSL-15%まで持つのだ）")
+else:
+    st.caption(f"🎯 今買うなら｜損切り-15%＝{symbol}{_p*0.85:,.2f}｜+50%＝{symbol}{_p*1.5:,.2f}｜+100%＝{symbol}{_p*2:,.2f}｜+300%＝{symbol}{_p*4:,.2f}｜+500%＝{symbol}{_p*6:,.2f}（※3分割後は平均取得単価が基準）")
+    _exit_lines = ("- 利確: **値幅段階利確 +100% / +300% / +500%**（守り銘柄のみTP+50%）\n"
+                   "- 保有: **年単位**（長く持つほどEVが上がる＝5年で+49%）。180日で切らないのだ")
 
 # === 企業アクションによる指標汚染の警告（点灯を評価する前に必ず目に入る位置に置く）===
 if ticker in CORPORATE_ACTIONS:
@@ -2013,8 +2089,7 @@ if bottom_score >= 10:
 - 第2回買い: {_t2}頃（+15営業日、1/3）
 - 第3回買い: {_t3}頃（+30営業日、1/3）
 - 損切: 平均取得単価 **-15%**（固定）
-- 利確: **値幅段階利確 +100% / +300% / +500%**（守り銘柄のみTP+50%）
-- 保有: **年単位**（長く持つほどEVが上がる＝5年で+49%）。180日で切らないのだ
+{_exit_lines}
 - ⚠️ 満点10は大底9より-11pt。「深いほど良い」ではないのだ
 - ⚠️ ファンダメンタル（財務健全性＝倒産リスク）の確認を忘れずに""")
 elif bottom_score == 9:
@@ -2027,8 +2102,7 @@ elif bottom_score == 9:
 - 第2回買い: {_t2}頃（+15営業日、1/3）
 - 第3回買い: {_t3}頃（+30営業日、1/3）
 - 損切: 平均取得単価 **-15%**（固定）
-- 利確: **値幅段階利確 +100% / +300% / +500%**（守り銘柄のみTP+50%）
-- 保有: **年単位**（長く持つほどEVが上がる＝5年で+49%）。180日で切らないのだ
+{_exit_lines}
 - ⚠️ 7回負けて3回大きく勝つ設計なのだ。負けが続くのは仕様通りなのだ
 - ⚠️ ファンダメンタル（財務健全性＝倒産リスク）の確認を忘れずに""")
 elif bottom_score == 8:
@@ -2058,10 +2132,18 @@ else:
              "range": "➡️ 月足トレンド：レンジ（3年EV+54.2%＝最良・満額可）"}
     st.caption(_tmap.get(trend, "ℹ️ 月足トレンド：対象外（暗号資産・高ボラ株はトレンドラインが効かない）"))
 
+# ★2026-11-09：売りの合図はC3（天井8以上＋月足弱気ダイバ）。天井8・9単独は表示のみ。
+if top_score >= 8 and _c3_role is not None:
+    if _bear is None:
+        st.warning("⚠️ 月足弱気ダイバを判定できなかったのだ（全期間データの取得失敗）。C3は不明なのだ")
+    elif _c3 and _c3_role == "sell":
+        st.error(f"🔴 **C3成立（天井{top_score}/9＋月足弱気ダイバ）**：逆張り柱の米国個別株なら**売りの合図**なのだ")
+    elif _c3:
+        st.warning(f"🟡 C3成立（天井{top_score}/9＋月足弱気ダイバ）：日本株は検証中なので**表示のみ**なのだ")
 if top_score >= 9:
-    st.error(f"⛔🚨 **天井フル点灯（{top_score}/9 満点）**：保有していれば利確・リスク管理を検討")
+    st.warning(f"⛔ 天井フル点灯（{top_score}/9）：**表示のみ**なのだ。売りの合図はC3なのだ")
 elif top_score == 8:
-    st.error(f"🔴 **売りシグナル点灯（天井スコア{top_score}/9）**：保有していれば利確・リスク管理を検討")
+    st.warning(f"⚠️ 天井8（{top_score}/9）：**表示のみ**なのだ。売りの合図はC3なのだ")
 elif top_score == 7:
     st.warning(f"⚠️ 天井警戒（天井スコア{top_score}/9）")
 
@@ -2261,6 +2343,8 @@ PER: {_per_txt} ｜ PBR: {_pbr_txt}
 天井スコア: {top_score}/9
 週足スコア: {_wtxt}
 月足トレンド: {_trend_txt}
+月足弱気ダイバ: {'あり' if _bear else ('取得失敗' if (_bear is None and _c3_role is not None) else ('対象外' if _c3_role is None else 'なし'))}
+C3（天井8以上＋月足弱気ダイバ）: {'対象外（暗号資産系・ETF・指数）' if _c3_role is None else (('成立' if _c3 else '不成立') + ('（日本株は表示のみ）' if _c3_role == 'display' else ''))}
 ダイバージェンス: 月足={'あり(勝率79%)' if _div['monthly'] else 'なし'} / 日足={'あり(勝率74%)' if _div['daily'] else 'なし'}
 モメンタム: {_mom_txt}
 ここぞ判定: {_kokozo}
